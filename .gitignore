@@ -1,0 +1,7 @@
+AUTHORS
+build/
+ChangeLog
+*.egg-info/
+.idea/
+*.pyc
+__pycache__/
