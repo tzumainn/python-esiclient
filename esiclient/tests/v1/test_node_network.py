@@ -100,10 +100,12 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Network", "Fixed IP"],
-            [["node1", "aa:aa:aa:aa:aa:aa", "test_network", "1.1.1.1"],
-             ["node2", "bb:bb:bb:bb:bb:bb", None, None],
-             ["node2", "cc:cc:cc:cc:cc:cc", "test_network", "2.2.2.2"]]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            [["node1", "aa:aa:aa:aa:aa:aa",
+              "node1", "test_network", "1.1.1.1"],
+             ["node2", "bb:bb:bb:bb:bb:bb", None, None, None],
+             ["node2", "cc:cc:cc:cc:cc:cc",
+              "node2", "test_network", "2.2.2.2"]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -120,9 +122,10 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Network", "Fixed IP"],
-            [["node2", "bb:bb:bb:bb:bb:bb", None, None],
-             ["node2", "cc:cc:cc:cc:cc:cc", "test_network", "2.2.2.2"]]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            [["node2", "bb:bb:bb:bb:bb:bb", None, None, None],
+             ["node2", "cc:cc:cc:cc:cc:cc",
+              "node2", "test_network", "2.2.2.2"]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -139,9 +142,11 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Network", "Fixed IP"],
-            [["node1", "aa:aa:aa:aa:aa:aa", "test_network", "1.1.1.1"],
-             ["node2", "cc:cc:cc:cc:cc:cc", "test_network", "2.2.2.2"]]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            [["node1", "aa:aa:aa:aa:aa:aa",
+              "node1", "test_network", "1.1.1.1"],
+             ["node2", "cc:cc:cc:cc:cc:cc",
+              "node2", "test_network", "2.2.2.2"]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -158,8 +163,9 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Network", "Fixed IP"],
-            [["node2", "cc:cc:cc:cc:cc:cc", "test_network", "2.2.2.2"]]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            [["node2", "cc:cc:cc:cc:cc:cc",
+              "node2", "test_network", "2.2.2.2"]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -223,26 +229,30 @@ class TestAttach(base.TestCommand):
 
         self.app.client_manager.network.find_network.\
             return_value = self.network
+        self.app.client_manager.network.get_network.\
+            return_value = self.network
         self.app.client_manager.network.create_port.\
+            return_value = self.neutron_port
+        self.app.client_manager.network.find_port.\
             return_value = self.neutron_port
         self.app.client_manager.network.get_port.\
             return_value = self.neutron_port
 
-    def test_take_action(self):
+    def test_take_action_network(self):
         self.app.client_manager.baremetal.node.get.\
             return_value = self.node
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port1, self.port2]
 
-        arglist = ['node1', 'test_network']
+        arglist = ['node1', '--network', 'test_network']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "test_network", "2.2.2.2"]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
@@ -250,6 +260,52 @@ class TestAttach(base.TestCommand):
                                     network_id=self.network.id)
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
+
+    def test_take_action_port(self):
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+
+        arglist = ['node1', '--port', 'node1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+        expected = (
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
+        )
+        self.assertEqual(expected, results)
+        self.app.client_manager.network.find_port.\
+            assert_called_once_with("node1")
+        self.app.client_manager.network.get_network.\
+            assert_called_once_with("network_uuid")
+        self.app.client_manager.baremetal.node.vif_attach.\
+            assert_called_once_with('node1', self.neutron_port.id)
+
+    def test_take_action_port_and_network_exception(self):
+        arglist = ['node1', '--network', 'test_network', '--port', 'node1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Specify only one of network or port',
+            self.cmd.take_action, parsed_args)
+
+    def test_take_action_no_port_or_network_exception(self):
+        arglist = ['node1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: You must specify either network or port',
+            self.cmd.take_action, parsed_args)
 
     def test_take_action_adopt(self):
         self.app.client_manager.baremetal.node.get.\
@@ -263,15 +319,15 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.node.set_provision_state.\
             side_effect = mock_node_set_provision_state
 
-        arglist = ['node1', 'test_network']
+        arglist = ['node1', '--network', 'test_network']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "test_network", "2.2.2.2"]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
@@ -298,15 +354,15 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.node.set_provision_state.\
             side_effect = mock_node_set_provision_state
 
-        arglist = ['node1', 'test_network']
+        arglist = ['node1', '--network', 'test_network']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "test_network", "2.2.2.2"]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
@@ -327,7 +383,7 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port1, self.port2]
 
-        arglist = ['node1', 'test_network']
+        arglist = ['node1', '--network', 'test_network']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
@@ -343,7 +399,7 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port1]
 
-        arglist = ['node1', 'test_network']
+        arglist = ['node1', '--network', 'test_network']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
@@ -365,10 +421,6 @@ class TestDetach(base.TestCommand):
             "name": "node1",
             "provision_state": "active"
         })
-        self.network = utils.create_mock_object({
-            "id": "network_uuid",
-            "name": "test_network"
-        })
         self.neutron_port = utils.create_mock_object({
             "id": "neutron_port_uuid_1",
             "network_id": "network_uuid",
@@ -379,14 +431,12 @@ class TestDetach(base.TestCommand):
 
         self.app.client_manager.baremetal.node.get.\
             return_value = self.node
-        self.app.client_manager.network.find_network.\
-            return_value = self.network
 
     def test_take_action(self):
         self.app.client_manager.network.find_port.\
             return_value = self.neutron_port
 
-        arglist = ['node1', 'test_network']
+        arglist = ['node1', 'node1']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
@@ -394,20 +444,18 @@ class TestDetach(base.TestCommand):
         self.cmd.take_action(parsed_args)
         self.app.client_manager.baremetal.node.vif_detach.\
             assert_called_once_with('node1', self.neutron_port.id)
-        self.app.client_manager.network.delete_port.\
-            assert_called_once_with(self.neutron_port.id)
 
     def test_take_action_port_exception(self):
         self.app.client_manager.network.find_port.\
             return_value = None
 
-        arglist = ['node1', 'test_network']
+        arglist = ['node1', 'bad-port']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
 
         self.assertRaisesRegex(
             exceptions.CommandError,
-            'ERROR: Network test_network is not attached to node node1',
+            'ERROR: Port bad-port not attached to node node1',
             self.cmd.take_action, parsed_args
         )
