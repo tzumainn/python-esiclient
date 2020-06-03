@@ -16,6 +16,8 @@ from osc_lib.command import command
 from osc_lib import exceptions
 from osc_lib.i18n import _
 
+from esiclient import utils
+
 ACTIVE = 'active'
 ADOPT = 'adopt'
 MANAGEABLE = 'manageable'
@@ -64,11 +66,12 @@ class List(command.Lister):
                 neutron_port = neutron_client.get_port(neutron_port_id)
                 network_id = neutron_port.network_id
                 if not parsed_args.network or filter_network.id == network_id:
-                    network = neutron_client.get_network(network_id)
-                    if len(neutron_port.fixed_ips) > 0:
-                        fixed_ip = neutron_port.fixed_ips[0]['ip_address']
+                    names, fixed_ips = utils.get_full_network_info_from_port(
+                        neutron_port, neutron_client)
                     data.append([node.name, port.address,
-                                 neutron_port.name, network.name, fixed_ip])
+                                 neutron_port.name,
+                                 "\n".join(names),
+                                 "\n".join(fixed_ips)])
             elif not parsed_args.network:
                 data.append([node.name, port.address, None, None, None])
 
@@ -178,9 +181,13 @@ class Attach(command.ShowOne):
             ironic_client.node.vif_attach(node_uuid, port.id)
             port = neutron_client.get_port(port.id)
 
+        names, fixed_ips = utils.get_full_network_info_from_port(
+            port, neutron_client)
+
         return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], \
-            [node.name, port.mac_address, port.name, network.name,
-             port.fixed_ips[0]['ip_address']]
+            [node.name, port.mac_address, port.name,
+             "\n".join(names),
+             "\n".join(fixed_ips)]
 
 
 class Detach(command.Command):
