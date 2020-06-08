@@ -68,11 +68,11 @@ class List(command.Lister):
                     if len(neutron_port.fixed_ips) > 0:
                         fixed_ip = neutron_port.fixed_ips[0]['ip_address']
                     data.append([node.name, port.address,
-                                 network.name, fixed_ip])
+                                 neutron_port.name, network.name, fixed_ip])
             elif not parsed_args.network:
-                data.append([node.name, port.address, None, None])
+                data.append([node.name, port.address, None, None, None])
 
-        return ["Node", "MAC Address", "Network", "Fixed IP"], data
+        return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], data
 
 
 class Attach(command.ShowOne):
@@ -87,9 +87,15 @@ class Attach(command.ShowOne):
             metavar="<node>",
             help=_("Name or UUID of the node"))
         parser.add_argument(
-            "network",
+            "--network",
             metavar="<network>",
             help=_("Name or UUID of the network"))
+        parser.add_argument(
+            '--port',
+            dest='port',
+            metavar='<port>',
+            help=_("Attach to this port (name or UUID).")
+        )
 
         return parser
 
@@ -97,13 +103,23 @@ class Attach(command.ShowOne):
         self.log.debug("take_action(%s)" % parsed_args)
 
         node_uuid = parsed_args.node
-        network_uuid = parsed_args.network
+        if parsed_args.network and parsed_args.port:
+            raise exceptions.CommandError(
+                "ERROR: Specify only one of network or port")
+        if not parsed_args.network and not parsed_args.port:
+            raise exceptions.CommandError(
+                "ERROR: You must specify either network or port")
 
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
 
+        if parsed_args.network:
+            network = neutron_client.find_network(parsed_args.network)
+            port = None
+        elif parsed_args.port:
+            port = neutron_client.find_port(parsed_args.port)
+
         node = ironic_client.node.get(node_uuid)
-        network = neutron_client.find_network(network_uuid)
 
         if node.provision_state == MANAGEABLE:
             # adopt the node
@@ -149,17 +165,22 @@ class Attach(command.ShowOne):
             raise exceptions.CommandError(
                 "ERROR: Node {0} has no free ports".format(node.name))
 
-        print("Attaching network {1} to node {0}".format(
-            node.name, network.name))
+        if port:
+            print("Attaching node {0} to port {1}".format(
+                node.name, port.name))
+            ironic_client.node.vif_attach(node_uuid, port.id)
+            network = neutron_client.get_network(port.network_id)
+        else:
+            print("Attaching network {1} to node {0}".format(
+                node.name, network.name))
+            port = neutron_client.create_port(name=node.name,
+                                              network_id=network.id)
+            ironic_client.node.vif_attach(node_uuid, port.id)
+            port = neutron_client.get_port(port.id)
 
-        port = neutron_client.create_port(name=node.name,
-                                          network_id=network.id)
-        ironic_client.node.vif_attach(node_uuid, port.id)
-        updated_port = neutron_client.get_port(port.id)
-
-        return ["Node", "MAC Address", "Network", "Fixed IP"], \
-            [node.name, updated_port.mac_address, network.name,
-             updated_port.fixed_ips[0]['ip_address']]
+        return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], \
+            [node.name, port.mac_address, port.name, network.name,
+             port.fixed_ips[0]['ip_address']]
 
 
 class Detach(command.Command):
@@ -174,9 +195,9 @@ class Detach(command.Command):
             metavar="<node>",
             help=_("Name or UUID of the node"))
         parser.add_argument(
-            "network",
-            metavar="<network>",
-            help=_("Name or UUID of the network"))
+            "port",
+            metavar="<port>",
+            help=_("Name or UUID of the port"))
 
         return parser
 
@@ -184,23 +205,20 @@ class Detach(command.Command):
         self.log.debug("take_action(%s)" % parsed_args)
 
         node_uuid = parsed_args.node
-        network_uuid = parsed_args.network
+        port_uuid = parsed_args.port
 
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
 
         node = ironic_client.node.get(node_uuid)
-        network = neutron_client.find_network(network_uuid)
+        port = neutron_client.find_port(port_uuid)
 
-        port = neutron_client.find_port(node.name,
-                                        network_id=network.id)
         if not port:
             raise exceptions.CommandError(
-                "ERROR: Network {1} is not attached to node {0}".format(
-                    node.name, network.name))
+                "ERROR: Port {1} not attached to node {0}".format(
+                    node.name, port_uuid))
 
-        print("Detaching network {1} from node {0}".format(
-            node.name, network.name))
+        print("Detaching node {0} from port {1}".format(
+            node.name, port.name))
 
         ironic_client.node.vif_detach(node_uuid, port.id)
-        neutron_client.delete_port(port.id)
