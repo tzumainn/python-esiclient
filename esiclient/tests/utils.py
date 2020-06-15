@@ -15,7 +15,7 @@ import mock
 
 
 def create_mock_object(mock_attributes):
-    mock_object = mock.Mock()
+    mock_object = mock.Mock(spec=[])
     mock_object.configure_mock(**mock_attributes)
 
     return mock_object
