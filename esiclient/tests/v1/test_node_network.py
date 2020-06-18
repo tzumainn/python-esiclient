@@ -245,7 +245,7 @@ class TestAttach(base.TestCommand):
         self.neutron_port = utils.create_mock_object({
             "id": "neutron_port_uuid_2",
             "network_id": "network_uuid",
-            "name": "node1",
+            "name": "node1-port",
             "mac_address": "bb:bb:bb:bb:bb:bb",
             "fixed_ips": [{"ip_address": "2.2.2.2"}],
             "trunk_details": None
@@ -279,7 +279,8 @@ class TestAttach(base.TestCommand):
         results = self.cmd.take_action(parsed_args)
         expected = (
             ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port", "test_network",
+             "2.2.2.2"]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
@@ -298,7 +299,7 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port1, self.port2]
 
-        arglist = ['node1', '--port', 'node1']
+        arglist = ['node1', '--port', 'node1-port']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
@@ -306,15 +307,49 @@ class TestAttach(base.TestCommand):
         results = self.cmd.take_action(parsed_args)
         expected = (
             ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port", "test_network",
+             "2.2.2.2"]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.find_port.\
-            assert_called_once_with("node1")
+            assert_called_once_with("node1-port")
         self.app.client_manager.network.get_network.\
             assert_called_once_with("network_uuid")
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
+        mock_gfnifp.assert_called_once
+
+    @mock.patch('esiclient.utils.get_full_network_info_from_port',
+                return_value=(["test_network"], ["2.2.2.2"]),
+                autospec=True)
+    def test_take_action_port_and_mac_address(self, mock_gfnifp):
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.baremetal.port.get_by_address.\
+            return_value = self.port2
+
+        arglist = ['node1', '--port', 'node1-port',
+                   '--mac-address', 'bb:bb:bb:bb:bb:bb']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+        expected = (
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port", "test_network",
+             "2.2.2.2"]
+        )
+        self.assertEqual(expected, results)
+        self.app.client_manager.network.find_port.\
+            assert_called_once_with("node1-port")
+        self.app.client_manager.network.get_network.\
+            assert_called_once_with("network_uuid")
+        self.app.client_manager.baremetal.port.get_by_address.\
+            assert_called_once_with('bb:bb:bb:bb:bb:bb')
+        self.app.client_manager.baremetal.node.vif_attach.\
+            assert_called_once_with('node1', self.neutron_port.id,
+                                    port_uuid='port_uuid_2')
         mock_gfnifp.assert_called_once
 
     def test_take_action_port_and_network_exception(self):
@@ -362,7 +397,8 @@ class TestAttach(base.TestCommand):
         results = self.cmd.take_action(parsed_args)
         expected = (
             ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port", "test_network",
+             "2.2.2.2"]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
@@ -401,7 +437,8 @@ class TestAttach(base.TestCommand):
         results = self.cmd.take_action(parsed_args)
         expected = (
             ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "node1", "test_network", "2.2.2.2"]
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port", "test_network",
+             "2.2.2.2"]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\

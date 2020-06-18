@@ -97,7 +97,13 @@ class Attach(command.ShowOne):
             '--port',
             dest='port',
             metavar='<port>',
-            help=_("Attach to this port (name or UUID).")
+            help=_("Attach to this neutron port (name or UUID).")
+        )
+        parser.add_argument(
+            '--mac-address',
+            dest='mac_address',
+            metavar='<mac address>',
+            help=_("Attach to this mac address.")
         )
 
         return parser
@@ -157,28 +163,37 @@ class Attach(command.ShowOne):
                 "ERROR: Node {0} must be in the active state".format(
                     node.name))
 
-        baremetal_ports = ironic_client.port.list(node=node_uuid, detail=True)
-        has_free_port = False
-        for bp in baremetal_ports:
-            if 'tenant_vif_port_id' not in bp.internal_info:
-                has_free_port = True
-                break
+        if parsed_args.mac_address:
+            bp = ironic_client.port.get_by_address(parsed_args.mac_address)
+            vif_info = {'port_uuid': bp.uuid}
+            mac_string = " on {0}".format(parsed_args.mac_address)
+        else:
+            vif_info = {}
+            mac_string = ""
 
-        if not has_free_port:
-            raise exceptions.CommandError(
-                "ERROR: Node {0} has no free ports".format(node.name))
+            baremetal_ports = ironic_client.port.list(
+                node=node_uuid, detail=True)
+            has_free_port = False
+            for bp in baremetal_ports:
+                if 'tenant_vif_port_id' not in bp.internal_info:
+                    has_free_port = True
+                    break
+
+            if not has_free_port:
+                raise exceptions.CommandError(
+                    "ERROR: Node {0} has no free ports".format(node.name))
 
         if port:
-            print("Attaching node {0} to port {1}".format(
-                node.name, port.name))
-            ironic_client.node.vif_attach(node_uuid, port.id)
+            print("Attaching port {1} to node {0}{2}".format(
+                node.name, port.name, mac_string))
+            ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
             network = neutron_client.get_network(port.network_id)
         else:
-            print("Attaching network {1} to node {0}".format(
-                node.name, network.name))
+            print("Attaching network {1} to node {0}{2}".format(
+                node.name, network.name, mac_string))
             port = neutron_client.create_port(name=node.name,
                                               network_id=network.id)
-            ironic_client.node.vif_attach(node_uuid, port.id)
+            ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
             port = neutron_client.get_port(port.id)
 
         names, fixed_ips = utils.get_full_network_info_from_port(
