@@ -139,9 +139,9 @@ class TestGetFullNetworkInfoFromPort(TestCase):
         results = utils.get_full_network_info_from_port(port,
                                                         self.neutron_client)
         self.assertEqual((
-            ['test_network (777)',
-             'test_network (777)',
+            ['test_network (777)', 'test_network (777)',
              'test_network_2 (888)'],
+            ['test_port', 'test_subport_1', 'test_subport_2'],
             ['77.77.77.77', '11.22.33.44', '55.66.77.88']
         ), results)
 
@@ -156,4 +156,7 @@ class TestGetFullNetworkInfoFromPort(TestCase):
 
         results = utils.get_full_network_info_from_port(port,
                                                         self.neutron_client)
-        self.assertEqual((['test_network (777)'], ['77.77.77.77']), results)
+        self.assertEqual(
+            (['test_network (777)'], ['test_port'], ['77.77.77.77']),
+            results
+        )

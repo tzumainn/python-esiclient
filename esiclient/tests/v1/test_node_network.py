@@ -116,7 +116,8 @@ class TestList(base.TestCommand):
             assert_called_once_with(detail=True)
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["2.2.2.2"]),
+                return_value=(["test_network"], ["node2"],
+                              ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_node_filter(self, mock_gfnifp):
         self.app.client_manager.baremetal.port.list.\
@@ -144,9 +145,9 @@ class TestList(base.TestCommand):
     def test_take_action_network_filter(self, mock_gfnifp):
         def mock_gfnifp_values(port, client):
             if port.id == 'neutron_port_uuid_1':
-                return ['test_network'], ['1.1.1.1']
+                return ['test_network'], ['node1'], ['1.1.1.1']
             elif port.id == 'neutron_port_uuid_2':
-                return ['test_network'], ['2.2.2.2']
+                return ['test_network'], ['node2'], ['2.2.2.2']
             return None
         mock_gfnifp.side_effect = mock_gfnifp_values
 
@@ -172,7 +173,8 @@ class TestList(base.TestCommand):
         self.assertEqual(mock_gfnifp.call_count, 2)
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["2.2.2.2"]),
+                return_value=(["test_network"], ["node2"],
+                              ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_node_network_filter(self, mock_gfnifp):
         self.app.client_manager.baremetal.port.list.\
@@ -263,7 +265,8 @@ class TestAttach(base.TestCommand):
             return_value = self.neutron_port
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["2.2.2.2"]),
+                return_value=(["test_network"], ["node2"],
+                              ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_network(self, mock_gfnifp):
         self.app.client_manager.baremetal.node.get.\
@@ -291,7 +294,8 @@ class TestAttach(base.TestCommand):
         mock_gfnifp.assert_called_once
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["2.2.2.2"]),
+                return_value=(["test_network"], ["node2"],
+                              ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_port(self, mock_gfnifp):
         self.app.client_manager.baremetal.node.get.\
@@ -320,7 +324,8 @@ class TestAttach(base.TestCommand):
         mock_gfnifp.assert_called_once
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["2.2.2.2"]),
+                return_value=(["test_network"], ["node2"],
+                              ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_port_and_mac_address(self, mock_gfnifp):
         self.app.client_manager.baremetal.node.get.\
@@ -375,7 +380,8 @@ class TestAttach(base.TestCommand):
             self.cmd.take_action, parsed_args)
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["2.2.2.2"]),
+                return_value=(["test_network"], ["node2"],
+                              ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_adopt(self, mock_gfnifp):
         self.app.client_manager.baremetal.node.get.\
@@ -415,7 +421,8 @@ class TestAttach(base.TestCommand):
         mock_gfnifp.assert_called_once
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["2.2.2.2"]),
+                return_value=(["test_network"], ["node2"],
+                              ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_adopt_no_update(self, mock_gfnifp):
         self.app.client_manager.baremetal.node.get.\

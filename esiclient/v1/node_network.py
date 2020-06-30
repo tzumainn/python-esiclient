@@ -66,11 +66,12 @@ class List(command.Lister):
                 neutron_port = neutron_client.get_port(neutron_port_id)
                 network_id = neutron_port.network_id
                 if not parsed_args.network or filter_network.id == network_id:
-                    names, fixed_ips = utils.get_full_network_info_from_port(
-                        neutron_port, neutron_client)
+                    network_names, port_names, fixed_ips \
+                        = utils.get_full_network_info_from_port(
+                            neutron_port, neutron_client)
                     data.append([node.name, port.address,
                                  neutron_port.name,
-                                 "\n".join(names),
+                                 "\n".join(network_names),
                                  "\n".join(fixed_ips)])
             elif not parsed_args.network:
                 data.append([node.name, port.address, None, None, None])
@@ -196,12 +197,13 @@ class Attach(command.ShowOne):
             ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
             port = neutron_client.get_port(port.id)
 
-        names, fixed_ips = utils.get_full_network_info_from_port(
-            port, neutron_client)
+        network_names, port_names, fixed_ips \
+            = utils.get_full_network_info_from_port(
+                port, neutron_client)
 
         return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], \
             [node.name, port.mac_address, port.name,
-             "\n".join(names),
+             "\n".join(network_names),
              "\n".join(fixed_ips)]
 
 
