@@ -47,19 +47,23 @@ def get_full_network_info_from_port(port, client):
     :param port: a Neutron port
     :param client: neutron client
     """
-    names = []
+    network_names = []
+    port_names = []
     fixed_ips = []
 
-    name, fixed_ip = get_network_info_from_port(port, client)
-    names.append(name)
+    network_name, fixed_ip = get_network_info_from_port(port, client)
+    network_names.append(network_name)
     fixed_ips.append(fixed_ip)
+    port_names.append(port.name)
 
     if port.trunk_details:
         subports = port.trunk_details['sub_ports']
         for subport_info in subports:
             subport = client.get_port(subport_info['port_id'])
-            name, fixed_ip = get_network_info_from_port(subport, client)
-            names.append(name)
+            network_name, fixed_ip = get_network_info_from_port(
+                subport, client)
+            network_names.append(network_name)
             fixed_ips.append(fixed_ip)
+            port_names.append(subport.name)
 
-    return names, fixed_ips
+    return network_names, port_names, fixed_ips
