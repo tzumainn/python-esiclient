@@ -5,3 +5,5 @@ ChangeLog
 .idea/
 *.pyc
 __pycache__/
+.stestr/
+.tox/
