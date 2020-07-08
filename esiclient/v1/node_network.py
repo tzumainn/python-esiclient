@@ -45,7 +45,7 @@ class List(command.Lister):
         return parser
 
     def take_action(self, parsed_args):
-        self.log.debug("take_action(%s)" % parsed_args)
+        self.log.debug("take_action(%s)", parsed_args)
 
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
@@ -66,7 +66,7 @@ class List(command.Lister):
                 neutron_port = neutron_client.get_port(neutron_port_id)
                 network_id = neutron_port.network_id
                 if not parsed_args.network or filter_network.id == network_id:
-                    network_names, port_names, fixed_ips \
+                    network_names, _, fixed_ips \
                         = utils.get_full_network_info_from_port(
                             neutron_port, neutron_client)
                     data.append([node.name, port.address,
@@ -110,7 +110,7 @@ class Attach(command.ShowOne):
         return parser
 
     def take_action(self, parsed_args):
-        self.log.debug("take_action(%s)" % parsed_args)
+        self.log.debug("take_action(%s)", parsed_args)
 
         node_uuid = parsed_args.node
         if parsed_args.network and parsed_args.port:
@@ -197,7 +197,7 @@ class Attach(command.ShowOne):
             ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
             port = neutron_client.get_port(port.id)
 
-        network_names, port_names, fixed_ips \
+        network_names, _, fixed_ips \
             = utils.get_full_network_info_from_port(
                 port, neutron_client)
 
@@ -226,7 +226,7 @@ class Detach(command.Command):
         return parser
 
     def take_action(self, parsed_args):
-        self.log.debug("take_action(%s)" % parsed_args)
+        self.log.debug("take_action(%s)", parsed_args)
 
         node_uuid = parsed_args.node
         port_uuid = parsed_args.port

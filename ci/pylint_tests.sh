@@ -9,7 +9,6 @@ pylint \
   --enable=wildcard-import \
   --enable=signature-differs \
   --enable=arguments-differ \
-  --enable=missing-docstring \
   --enable=logging-not-lazy \
   --enable=reimported \
   $(./ci/list_tracked_pyfiles.sh)

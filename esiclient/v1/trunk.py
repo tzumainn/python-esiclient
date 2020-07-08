@@ -28,7 +28,7 @@ class List(command.Lister):
         return parser
 
     def take_action(self, parsed_args):
-        self.log.debug("take_action(%s)" % parsed_args)
+        self.log.debug("take_action(%s)", parsed_args)
 
         neutron_client = self.app.client_manager.network
         trunks = neutron_client.trunks()
@@ -36,7 +36,7 @@ class List(command.Lister):
         data = []
         for trunk in trunks:
             trunk_port = neutron_client.get_port(trunk.port_id)
-            network_names, port_names, fixed_ips \
+            network_names, port_names, _ \
                 = utils.get_full_network_info_from_port(
                     trunk_port, neutron_client)
             data.append([trunk.name,
@@ -73,7 +73,7 @@ class Create(command.ShowOne):
         return parser
 
     def take_action(self, parsed_args):
-        self.log.debug("take_action(%s)" % parsed_args)
+        self.log.debug("take_action(%s)", parsed_args)
 
         neutron_client = self.app.client_manager.network
 
@@ -128,7 +128,7 @@ class Delete(command.Command):
         return parser
 
     def take_action(self, parsed_args):
-        self.log.debug("take_action(%s)" % parsed_args)
+        self.log.debug("take_action(%s)", parsed_args)
 
         neutron_client = self.app.client_manager.network
         trunk = neutron_client.find_trunk(parsed_args.name)
