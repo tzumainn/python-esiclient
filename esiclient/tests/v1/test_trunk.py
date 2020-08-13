@@ -13,6 +13,8 @@
 
 import mock
 
+from osc_lib import exceptions
+
 from esiclient.tests import base
 from esiclient.tests import utils
 from esiclient.v1 import trunk
@@ -30,13 +32,13 @@ class TestList(base.TestCommand):
             "name": "trunk1-network1-trunk-port",
             "mac_address": "aa:aa:aa:aa:aa:aa",
         })
-        self.subport1 = utils.create_mock_object({
+        self.subport2 = utils.create_mock_object({
             "id": "port_uuid_2",
             "network_id": "network_uuid_2",
             "name": "trunk1-network2-sub-port",
             "mac_address": "bb:bb:bb:bb:bb:bb",
         })
-        self.subport2 = utils.create_mock_object({
+        self.subport3 = utils.create_mock_object({
             "id": "port_uuid_3",
             "network_id": "network_uuid_3",
             "name": "trunk1-network3-sub-port",
@@ -173,13 +175,13 @@ class TestCreate(base.TestCommand):
             "name": "trunk-network1-trunk-port",
             "mac_address": "aa:aa:aa:aa:aa:aa",
         })
-        self.subport1 = utils.create_mock_object({
+        self.subport2 = utils.create_mock_object({
             "id": "port_uuid_2",
             "network_id": "network_uuid_2",
             "name": "trunk-network2-sub-port",
             "mac_address": "bb:bb:bb:bb:bb:bb",
         })
-        self.subport2 = utils.create_mock_object({
+        self.subport3 = utils.create_mock_object({
             "id": "port_uuid_3",
             "network_id": "network_uuid_3",
             "name": "trunk-network3-sub-port",
@@ -218,9 +220,9 @@ class TestCreate(base.TestCommand):
             if network_id == "network_uuid_1":
                 return self.port
             if network_id == "network_uuid_2":
-                return self.subport1
-            if network_id == "network_uuid_3":
                 return self.subport2
+            if network_id == "network_uuid_3":
+                return self.subport3
             return None
         self.app.client_manager.network.create_port.\
             side_effect = mock_create_port
@@ -303,8 +305,13 @@ class TestDelete(base.TestCommand):
             ]
         })
 
+        def mock_find_trunk(trunk_name):
+            if trunk_name == "trunk":
+                return self.trunk
+            return None
         self.app.client_manager.network.find_trunk.\
-            return_value = self.trunk
+            side_effect = mock_find_trunk
+
         self.app.client_manager.network.delete_trunk.\
             return_value = None
         self.app.client_manager.network.delete_port.\
@@ -328,3 +335,323 @@ class TestDelete(base.TestCommand):
                 mock.call("port_uuid_3"),
                 mock.call("port_uuid_1"),
             ])
+
+    def test_take_action_no_trunk(self):
+        arglist = ['trunk2']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no trunk named trunk2',
+            self.cmd.take_action, parsed_args)
+
+
+class TestAddNetwork(base.TestCommand):
+
+    def setUp(self):
+        super(TestAddNetwork, self).setUp()
+        self.cmd = trunk.AddNetwork(self.app, None)
+
+        self.network2 = utils.create_mock_object({
+            "id": "network_uuid_2",
+            "name": "network2",
+            "provider_segmentation_id": 222
+        })
+        self.network3 = utils.create_mock_object({
+            "id": "network_uuid_3",
+            "name": "network3",
+            "provider_segmentation_id": 333
+        })
+        self.subport2 = utils.create_mock_object({
+            "id": "port_uuid_2",
+            "network_id": "network_uuid_2",
+            "name": "trunk-network2-sub-port",
+            "mac_address": "bb:bb:bb:bb:bb:bb",
+        })
+        self.subport3 = utils.create_mock_object({
+            "id": "port_uuid_3",
+            "network_id": "network_uuid_3",
+            "name": "trunk-network3-sub-port",
+            "mac_address": "cc:cc:cc:cc:cc:cc",
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "port_uuid_1",
+            "sub_ports": [
+                {
+                    "port_id": 'port_uuid_2',
+                    "segmentation_id": '222',
+                    "segmentation_type": 'vlan'
+                },
+                {
+                    "port_id": 'port_uuid_3',
+                    "segmentation_id": '333',
+                    "segmentation_type": 'vlan'
+                }
+            ]
+        })
+
+        def mock_find_trunk(trunk_name):
+            if trunk_name == "trunk":
+                return self.trunk
+            return None
+        self.app.client_manager.network.find_trunk.\
+            side_effect = mock_find_trunk
+
+        def mock_find_network(network_name):
+            if network_name == "network2":
+                return self.network2
+            if network_name == "network3":
+                return self.network3
+            return None
+        self.app.client_manager.network.find_network.\
+            side_effect = mock_find_network
+
+        def mock_create_port(name, network_id):
+            if network_id == "network_uuid_2":
+                return self.subport2
+            if network_id == "network_uuid_3":
+                return self.subport3
+            return None
+        self.app.client_manager.network.create_port.\
+            side_effect = mock_create_port
+
+        self.app.client_manager.network.add_trunk_subports.\
+            return_value = self.trunk
+
+    def test_take_action(self):
+        arglist = ['trunk',
+                   '--tagged-networks', 'network2',
+                   '--tagged-networks', 'network3']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+        expected = (
+            ['Trunk', 'Sub Ports'],
+            ['trunk',
+             [{'port_id': 'port_uuid_2',
+               'segmentation_id': '222',
+               'segmentation_type': 'vlan'},
+              {'port_id': 'port_uuid_3',
+               'segmentation_id': '333',
+               'segmentation_type': 'vlan'}]]
+        )
+
+        self.assertEqual(expected, results)
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with("trunk")
+        self.app.client_manager.network.create_port.\
+            assert_has_calls([
+                mock.call(name="trunk-network2-sub-port",
+                          network_id="network_uuid_2"),
+                mock.call(name="trunk-network3-sub-port",
+                          network_id="network_uuid_3")
+            ])
+        self.app.client_manager.network.find_network.\
+            assert_has_calls([
+                mock.call("network2"),
+                mock.call("network3")
+            ])
+        self.app.client_manager.network.add_trunk_subports.\
+            assert_called_once_with(
+                'trunk_uuid',
+                [
+                    {'port_id': 'port_uuid_2',
+                     'segmentation_type': 'vlan',
+                     'segmentation_id': 222},
+                    {'port_id': 'port_uuid_3',
+                     'segmentation_type': 'vlan',
+                     'segmentation_id': 333}
+                ]
+            )
+
+    def test_take_action_no_networks(self):
+        arglist = ['trunk']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no networks specified',
+            self.cmd.take_action, parsed_args)
+
+    def test_take_action_unknown_network(self):
+        arglist = ['trunk',
+                   '--tagged-networks', 'network2',
+                   '--tagged-networks', 'network4']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no network named network4',
+            self.cmd.take_action, parsed_args)
+
+    def test_take_action_no_trunk(self):
+        arglist = ['trunk2',
+                   '--tagged-networks', 'network2',
+                   '--tagged-networks', 'network3']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no trunk named trunk2',
+            self.cmd.take_action, parsed_args)
+
+
+class TestRemoveNetwork(base.TestCommand):
+
+    def setUp(self):
+        super(TestRemoveNetwork, self).setUp()
+        self.cmd = trunk.RemoveNetwork(self.app, None)
+
+        self.network2 = utils.create_mock_object({
+            "id": "network_uuid_2",
+            "name": "network2",
+            "provider_segmentation_id": 222
+        })
+        self.network3 = utils.create_mock_object({
+            "id": "network_uuid_3",
+            "name": "network3",
+            "provider_segmentation_id": 333
+        })
+        self.subport2 = utils.create_mock_object({
+            "id": "port_uuid_2",
+            "network_id": "network_uuid_2",
+            "name": "trunk-network2-sub-port",
+            "mac_address": "bb:bb:bb:bb:bb:bb",
+        })
+        self.subport3 = utils.create_mock_object({
+            "id": "port_uuid_3",
+            "network_id": "network_uuid_3",
+            "name": "trunk-network3-sub-port",
+            "mac_address": "cc:cc:cc:cc:cc:cc",
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "port_uuid_1",
+            "sub_ports": [
+                {
+                    "port_id": 'port_uuid_2',
+                    "segmentation_id": '222',
+                    "segmentation_type": 'vlan'
+                },
+                {
+                    "port_id": 'port_uuid_3',
+                    "segmentation_id": '333',
+                    "segmentation_type": 'vlan'
+                }
+            ]
+        })
+
+        def mock_find_trunk(trunk_name):
+            if trunk_name == "trunk":
+                return self.trunk
+            return None
+        self.app.client_manager.network.find_trunk.\
+            side_effect = mock_find_trunk
+
+        self.app.client_manager.network.delete_trunk_subports.\
+            return_value = self.trunk
+
+        self.app.client_manager.network.delete_port.\
+            return_value = None
+
+    def test_take_action(self):
+        arglist = ['trunk',
+                   '--tagged-networks', 'network2',
+                   '--tagged-networks', 'network3']
+        verifylist = []
+
+        def mock_find_port(port_name):
+            if port_name == "trunk-network2-sub-port":
+                return self.subport2
+            if port_name == "trunk-network3-sub-port":
+                return self.subport3
+            return None
+        self.app.client_manager.network.find_port.\
+            side_effect = mock_find_port
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with("trunk")
+        self.app.client_manager.network.find_port.\
+            assert_has_calls([
+                mock.call("trunk-network2-sub-port"),
+                mock.call("trunk-network3-sub-port")
+            ])
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_called_once_with(
+                'trunk_uuid',
+                [
+                    {'port_id': 'port_uuid_2'},
+                    {'port_id': 'port_uuid_3'}
+                ]
+            )
+
+        self.app.client_manager.network.delete_port.\
+            assert_has_calls([
+                mock.call("port_uuid_2"),
+                mock.call("port_uuid_3")
+            ])
+
+    def test_take_action_no_networks(self):
+        arglist = ['trunk']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no networks specified',
+            self.cmd.take_action, parsed_args)
+
+    def test_take_action_port_not_found(self):
+        arglist = ['trunk',
+                   '--tagged-networks', 'network2']
+        verifylist = []
+
+        self.app.client_manager.network.find_port.\
+            return_value = None
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: network2 is not attached to trunk',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with("trunk")
+        self.app.client_manager.network.find_port.\
+            assert_called_once_with("trunk-network2-sub-port")
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_not_called()
+        self.app.client_manager.network.delete_port.\
+            assert_not_called()
+
+    def test_take_action_no_trunk(self):
+        arglist = ['trunk2',
+                   '--tagged-networks', 'network2',
+                   '--tagged-networks', 'network3']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no trunk named trunk2',
+            self.cmd.take_action, parsed_args)

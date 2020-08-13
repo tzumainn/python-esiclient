@@ -13,6 +13,7 @@
 import logging
 
 from osc_lib.command import command
+from osc_lib import exceptions
 from osc_lib.i18n import _
 
 from esiclient import utils
@@ -113,6 +114,138 @@ class Create(command.ShowOne):
              trunk.sub_ports]
 
 
+class AddNetwork(command.ShowOne):
+    """Add tagged network"""
+
+    log = logging.getLogger(__name__ + ".AddNetwork")
+
+    def get_parser(self, prog_name):
+        parser = super(AddNetwork, self).get_parser(prog_name)
+        parser.add_argument(
+            "name",
+            metavar="<name>",
+            help=_("Name of trunk"))
+        parser.add_argument(
+            '--tagged-networks',
+            default=[],
+            dest='tagged_networks',
+            action='append',
+            metavar='<tagged_networks',
+            help=_("Name or UUID of tagged network")
+        )
+
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+
+        tagged_networks = parsed_args.tagged_networks
+
+        if len(tagged_networks) == 0:
+            raise exceptions.CommandError(
+                "ERROR: no networks specified")
+
+        neutron_client = self.app.client_manager.network
+        trunk = neutron_client.find_trunk(parsed_args.name)
+
+        if trunk is None:
+            raise exceptions.CommandError(
+                "ERROR: no trunk named {0}".format(parsed_args.name))
+
+        sub_ports = []
+        for tagged_network_name in tagged_networks:
+            tagged_network = neutron_client.find_network(
+                tagged_network_name)
+
+            if tagged_network is None:
+                raise exceptions.CommandError(
+                    "ERROR: no network named {0}".format(tagged_network_name))
+
+            sub_port = neutron_client.create_port(
+                name="{0}-{1}-sub-port".format(trunk.name,
+                                               tagged_network.name),
+                network_id=tagged_network.id
+            )
+            sub_ports.append({
+                'port_id': sub_port.id,
+                'segmentation_type': 'vlan',
+                'segmentation_id': tagged_network.provider_segmentation_id
+            })
+
+        trunk = neutron_client.add_trunk_subports(
+            trunk.id,
+            sub_ports
+        )
+
+        return ["Trunk", "Sub Ports"], \
+            [trunk.name,
+             trunk.sub_ports]
+
+
+class RemoveNetwork(command.ShowOne):
+    """Remove tagged network"""
+
+    log = logging.getLogger(__name__ + ".RemoveNetwork")
+
+    def get_parser(self, prog_name):
+        parser = super(RemoveNetwork, self).get_parser(prog_name)
+        parser.add_argument(
+            "name",
+            metavar="<name>",
+            help=_("Name of trunk"))
+        parser.add_argument(
+            '--tagged-networks',
+            default=[],
+            dest='tagged_networks',
+            action='append',
+            metavar='<tagged_networks',
+            help=_("Name or UUID of tagged network")
+        )
+
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+
+        tagged_networks = parsed_args.tagged_networks
+
+        if len(tagged_networks) == 0:
+            raise exceptions.CommandError(
+                "ERROR: no networks specified")
+
+        neutron_client = self.app.client_manager.network
+        trunk = neutron_client.find_trunk(parsed_args.name)
+
+        if trunk is None:
+            raise exceptions.CommandError(
+                "ERROR: no trunk named {0}".format(parsed_args.name))
+
+        sub_ports = []
+        for tagged_network_name in tagged_networks:
+            sub_port = neutron_client.find_port(
+                "{0}-{1}-sub-port".format(trunk.name,
+                                          tagged_network_name),
+            )
+            if not sub_port:
+                raise exceptions.CommandError(
+                    "ERROR: {1} is not attached to {0}".format(
+                        trunk.name, tagged_network_name))
+            sub_ports.append({
+                'port_id': sub_port.id,
+            })
+
+        trunk = neutron_client.delete_trunk_subports(
+            trunk.id,
+            sub_ports
+        )
+        for sub_port in sub_ports:
+            neutron_client.delete_port(sub_port['port_id'])
+
+        return ["Trunk", "Sub Ports"], \
+            [trunk.name,
+             trunk.sub_ports]
+
+
 class Delete(command.Command):
     """Delete trunk port and subports"""
 
@@ -132,6 +265,10 @@ class Delete(command.Command):
 
         neutron_client = self.app.client_manager.network
         trunk = neutron_client.find_trunk(parsed_args.name)
+
+        if trunk is None:
+            raise exceptions.CommandError(
+                "ERROR: no trunk named {0}".format(parsed_args.name))
 
         port_ids_to_delete = [sub_port['port_id']
                               for sub_port in trunk.sub_ports]
