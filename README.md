@@ -111,3 +111,19 @@ openstack esi trunk delete
 ```
 
 - `name`: Name of the trunk port
+
+### `openstack esi node volume attach`
+
+Boot a node with a volume
+
+```
+openstack esi node volume attach
+   (--network <network> | --port <port>)
+   [--mac-address <mac-address>]
+   <node> <volume>
+```
+
+- `--network <network>`:  Network (name or UUID)
+- `--port <port>`:  Neutron port (name or UUID)
+- `node`: Node (name or UUID)
+- `volume`: Volume (name or UUID)
