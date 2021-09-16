@@ -15,8 +15,8 @@ import mock
 
 from osc_lib import exceptions
 
-from esiclient.tests import base
-from esiclient.tests import utils
+from esiclient.tests.unit import base
+from esiclient.tests.unit import utils
 from esiclient.v1 import trunk
 
 
