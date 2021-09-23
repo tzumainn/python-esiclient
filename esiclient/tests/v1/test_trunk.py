@@ -216,7 +216,7 @@ class TestCreate(base.TestCommand):
         self.app.client_manager.network.find_network.\
             side_effect = mock_find_network
 
-        def mock_create_port(name, network_id):
+        def mock_create_port(name, network_id, device_owner):
             if network_id == "network_uuid_1":
                 return self.port
             if network_id == "network_uuid_2":
@@ -254,11 +254,14 @@ class TestCreate(base.TestCommand):
         self.app.client_manager.network.create_port.\
             assert_has_calls([
                 mock.call(name="trunk-network1-trunk-port",
-                          network_id="network_uuid_1"),
+                          network_id="network_uuid_1",
+                          device_owner='baremetal:none'),
                 mock.call(name="trunk-network2-sub-port",
-                          network_id="network_uuid_2"),
+                          network_id="network_uuid_2",
+                          device_owner='baremetal:none'),
                 mock.call(name="trunk-network3-sub-port",
-                          network_id="network_uuid_3")
+                          network_id="network_uuid_3",
+                          device_owner='baremetal:none')
             ])
         self.app.client_manager.network.find_network.\
             assert_has_calls([
@@ -410,7 +413,7 @@ class TestAddNetwork(base.TestCommand):
         self.app.client_manager.network.find_network.\
             side_effect = mock_find_network
 
-        def mock_create_port(name, network_id):
+        def mock_create_port(name, network_id, device_owner):
             if network_id == "network_uuid_2":
                 return self.subport2
             if network_id == "network_uuid_3":
@@ -448,9 +451,11 @@ class TestAddNetwork(base.TestCommand):
         self.app.client_manager.network.create_port.\
             assert_has_calls([
                 mock.call(name="trunk-network2-sub-port",
-                          network_id="network_uuid_2"),
+                          network_id="network_uuid_2",
+                          device_owner='baremetal:none'),
                 mock.call(name="trunk-network3-sub-port",
-                          network_id="network_uuid_3")
+                          network_id="network_uuid_3",
+                          device_owner='baremetal:none')
             ])
         self.app.client_manager.network.find_network.\
             assert_has_calls([

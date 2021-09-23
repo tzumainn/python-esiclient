@@ -288,7 +288,8 @@ class TestAttach(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
             assert_called_once_with(name=self.node.name,
-                                    network_id=self.network.id)
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         mock_gfnifp.assert_called_once
@@ -409,7 +410,8 @@ class TestAttach(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
             assert_called_once_with(name=self.node.name,
-                                    network_id=self.network.id)
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         self.app.client_manager.baremetal.node.vif_attach.\
@@ -450,7 +452,8 @@ class TestAttach(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
             assert_called_once_with(name=self.node.name,
-                                    network_id=self.network.id)
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         self.app.client_manager.baremetal.node.vif_attach.\

@@ -142,7 +142,8 @@ class TestAttach(base.TestCommand):
             assert_called_once()
         self.app.client_manager.network.create_port.\
             assert_called_once_with(name='volume-node1-volume1',
-                                    network_id=self.network.id)
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         self.app.client_manager.baremetal.node.set_provision_state.\
@@ -197,7 +198,8 @@ class TestAttach(base.TestCommand):
             assert_called_once()
         self.app.client_manager.network.create_port.\
             assert_called_once_with(name='volume-node1-volume1',
-                                    network_id=self.network.id)
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         self.app.client_manager.baremetal.node.set_provision_state.\
@@ -409,7 +411,8 @@ class TestAttach(base.TestCommand):
             assert_called_once()
         self.app.client_manager.network.create_port.\
             assert_called_once_with(name='volume-node1-volume1',
-                                    network_id=self.network.id)
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         self.app.client_manager.baremetal.node.set_provision_state.\
@@ -464,7 +467,8 @@ class TestAttach(base.TestCommand):
             assert_not_called()
         self.app.client_manager.network.create_port.\
             assert_called_once_with(name='volume-node1-volume1',
-                                    network_id=self.network.id)
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         self.app.client_manager.baremetal.node.set_provision_state.\

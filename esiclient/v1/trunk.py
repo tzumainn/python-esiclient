@@ -84,7 +84,8 @@ class Create(command.ShowOne):
 
         trunk_port = neutron_client.create_port(
             name="{0}-{1}-trunk-port".format(trunk_name, network.name),
-            network_id=network.id
+            network_id=network.id,
+            device_owner='baremetal:none'
         )
 
         sub_ports = []
@@ -94,7 +95,8 @@ class Create(command.ShowOne):
             sub_port = neutron_client.create_port(
                 name="{0}-{1}-sub-port".format(trunk_name,
                                                tagged_network.name),
-                network_id=tagged_network.id
+                network_id=tagged_network.id,
+                device_owner='baremetal:none'
             )
             sub_ports.append({
                 'port_id': sub_port.id,
@@ -164,7 +166,8 @@ class AddNetwork(command.ShowOne):
             sub_port = neutron_client.create_port(
                 name="{0}-{1}-sub-port".format(trunk.name,
                                                tagged_network.name),
-                network_id=tagged_network.id
+                network_id=tagged_network.id,
+                device_owner='baremetal:none'
             )
             sub_ports.append({
                 'port_id': sub_port.id,
