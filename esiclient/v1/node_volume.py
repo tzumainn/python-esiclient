@@ -114,19 +114,20 @@ class Attach(command.ShowOne):
                         'op': 'add'}]
         ironic_client.node.update(node_uuid, node_update)
 
-        # create volume connector if needed
+        # delete old volume connectors; create new one
         vcs = ironic_client.volume_connector.list(
             node=node_uuid,
         )
-        if len(vcs) == 0:
-            connector_id = 'iqn.%s.org.openstack.%s' % (
-                datetime.now().strftime('%Y-%m'),
-                node.uuid)
-            ironic_client.volume_connector.create(
-                node_uuid=node.uuid,
-                type='iqn',
-                connector_id=connector_id,
-            )
+        for vc in vcs:
+            ironic_client.volume_connector.delete(vc.uuid)
+        connector_id = 'iqn.%s.org.openstack.%s' % (
+            datetime.now().strftime('%Y-%m'),
+            uuidutils.generate_uuid())
+        ironic_client.volume_connector.create(
+            node_uuid=node.uuid,
+            type='iqn',
+            connector_id=connector_id,
+        )
 
         # create volume target if needed
         vts = [vt.volume_id for vt in
