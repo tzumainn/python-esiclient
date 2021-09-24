@@ -147,7 +147,8 @@ class Attach(command.ShowOne):
             # create port if needed
             port = neutron_client.create_port(
                 name="volume-%s-%s" % (node.name, volume.name),
-                network_id=network.id)
+                network_id=network.id,
+                device_owner='baremetal:none')
         ironic_client.node.vif_attach(node_uuid, port.id)
 
         # deploy
