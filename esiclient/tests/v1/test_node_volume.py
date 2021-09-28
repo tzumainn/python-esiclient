@@ -90,6 +90,8 @@ class TestAttach(base.TestCommand):
             return_value = self.node
         self.app.client_manager.baremetal.volume.volume_connector.create.\
             return_value = None
+        self.app.client_manager.baremetal.volume.volume_connector.delete.\
+            return_value = None
         self.app.client_manager.baremetal.volume.volume_target.create.\
             return_value = None
 
@@ -403,8 +405,10 @@ class TestAttach(base.TestCommand):
             assert_called_once()
         self.app.client_manager.baremetal.volume_connector.list.\
             assert_called_once_with(node='node1')
+        self.app.client_manager.baremetal.volume_connector.delete.\
+            assert_called_once()
         self.app.client_manager.baremetal.volume_connector.create.\
-            assert_not_called()
+            assert_called_once()
         self.app.client_manager.baremetal.volume_target.list.\
             assert_called_once_with(node='node1', fields=['volume_id'])
         self.app.client_manager.baremetal.volume_target.create.\
