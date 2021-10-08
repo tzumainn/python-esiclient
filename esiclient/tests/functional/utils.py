@@ -13,6 +13,7 @@
 #    under the License.
 
 import json
+import time
 
 from tempest.lib.common.utils import data_utils
 
@@ -51,9 +52,129 @@ def kwargs_to_flags(valid_flags, arguments):
     return flag_string
 
 
+def esi_node_network_attach(client, node_ident, port_ident, fail_ok=False):
+    client.esi('node network attach', '--port {0}'.format(port_ident),
+               node_ident, fail_ok)
+
+
+def esi_node_network_detach(client, node_ident, port_ident, fail_ok=False):
+    client.esi('node network detach ', '',
+               '{0} {1}'.format(node_ident, port_ident), fail_ok)
+
+
+def esi_node_network_list(client, params='', fail_ok=False):
+    output = client.esi('node network list',
+                        '{0} -f json'.format(params),
+                        '', fail_ok)
+    return json.loads(output)
+
+
+def esi_trunk_create(client, native_network_ident, name=None, fail_ok=False):
+    if not name:
+        name = data_utils.rand_name('trunk')
+    output = client.esi('trunk create',
+                        '--native-network {0} -f json'.format(
+                            native_network_ident),
+                        name, fail_ok)
+    return json.loads(output)
+
+
+def esi_trunk_delete(client, trunk_ident, fail_ok=False):
+    return client.esi('trunk delete', '', trunk_ident, fail_ok)
+
+
+def esi_trunk_list(client, fail_ok=False):
+    output = client.esi('trunk list', '-f json', '', fail_ok)
+    return json.loads(output)
+
+
+def esi_trunk_add_network(client, trunk_ident, tagged_network_ident,
+                          fail_ok=False):
+    return client.esi('trunk add network',
+                      '--tagged-networks {0}'.format(tagged_network_ident),
+                      trunk_ident, fail_ok)
+
+
+def esi_trunk_remove_network(client, trunk_ident, tagged_network_ident,
+                             fail_ok=False):
+    return client.esi('trunk remove network',
+                      '--tagged-networks {0}'.format(tagged_network_ident),
+                      trunk_ident, fail_ok)
+
+
+def image_create(client, image_path, name=None, visibility='public',
+                 disk_format='qcow2', container_format='bare',
+                 fail_ok=False):
+    if not name:
+        name = data_utils.rand_name('image')
+    output = client.image(
+        'create',
+        '--{0} --disk-format {1} --container-format {2} --file {3} -f json'
+        .format(visibility, disk_format, container_format, image_path),
+        name, fail_ok)
+    return json.loads(output)
+
+
+def image_delete(client, image_ident, fail_ok=False):
+    return client.image('delete', '', image_ident, fail_ok)
+
+
+def image_set(client, image_ident, param, fail_ok=False):
+    return client.image('set', param, image_ident, fail_ok)
+
+
+def image_show(client, image_ident, fail_ok=False):
+    output = client.image('show', '-f json', image_ident, fail_ok)
+    return json.loads(output)
+
+
+def image_add_project(client, image_ident, project, fail_ok=False):
+    return client.image('add project', '',
+                        "{0} {1}".format(image_ident, project),
+                        fail_ok)
+
+
+def image_remove_project(client, image_ident, project, fail_ok=False):
+    return client.image('remove project', '',
+                        "{0} {1}".format(image_ident, project),
+                        fail_ok)
+
+
+def network_create(client, shared='no-share', name=None, fail_ok=False):
+    if not name:
+        name = data_utils.rand_name('network')
+    output = client.network('create', '--{0} -f json'.format(shared),
+                            name, fail_ok)
+    return json.loads(output)
+
+
+def network_delete(client, network_ident, fail_ok=False):
+    return client.network('delete', '', network_ident, fail_ok)
+
+
+def network_show(client, network_ident, fail_ok=False):
+    output = client.network('show', '-f json', network_ident, fail_ok)
+    return json.loads(output)
+
+
+def network_rbac_create(client, project, network_ident,
+                        action='access_as_shared',
+                        share_type='network', fail_ok=False):
+    output = client.network(
+        'rbac create',
+        '--action {0} --type {1} --target-project {2} -f json'.format(
+            action, share_type, project),
+        network_ident, fail_ok)
+    return json.loads(output)
+
+
+def network_rbac_delete(client, network_rbac_ident, fail_ok=False):
+    return client.network('rbac delete', '',
+                          network_rbac_ident, fail_ok)
+
+
 def node_create(client, driver='fake-hardware', name=None, fail_ok=False,
                 **kwargs):
-
     if not name:
         name = data_utils.rand_name('baremetal-node')
 
@@ -69,22 +190,96 @@ def node_create(client, driver='fake-hardware', name=None, fail_ok=False,
     return json.loads(output)
 
 
-def node_delete(client, identifier, fail_ok=False):
-    return client.baremetal('node delete', '', identifier, fail_ok)
+def node_delete(client, node_ident, fail_ok=False):
+    return client.baremetal('node delete', '', node_ident, fail_ok)
 
 
-def node_power_on(client, identifier, fail_ok=False):
-    return client.baremetal('node power on', '', identifier, fail_ok)
+def node_power_on(client, node_ident, fail_ok=False):
+    return client.baremetal('node power on', '', node_ident, fail_ok)
 
 
-def node_power_off(client, identifier, fail_ok=False):
-    return client.baremetal('node power off', '', identifier, fail_ok)
+def node_power_off(client, node_ident, fail_ok=False):
+    return client.baremetal('node power off', '', node_ident, fail_ok)
 
 
-def node_set(client, identifier, fail_ok=False, **kwargs):
+def node_set(client, node_ident, param, value=None, fail_ok=False):
+    if value is None:
+        return client.baremetal('node unset', '--{0}'.format(param),
+                                node_ident, fail_ok)
+    return client.baremetal('node set', '--{0} {1}'.format(param, value),
+                            node_ident, fail_ok)
 
-    valid_flags = ('owner', 'lessee', )
 
-    flags = kwargs_to_flags(valid_flags, kwargs)
+def node_set_provision_state(client, node_ident, provision_state,
+                             fail_ok=False):
+    client.baremetal('node {0}'
+                     .format(provision_state),
+                     '', node_ident, fail_ok)
+    # wait until target provision state is None
+    node = node_show(client, node_ident, fail_ok)
+    while node['target_provision_state'] is not None:
+        node = node_show(client, node_ident, fail_ok)
+        time.sleep(15)
 
-    return client.baremetal('node set', flags, identifier, fail_ok)
+
+def node_show(client, node_ident, fail_ok=False):
+    output = client.baremetal('node show', '-f json', node_ident,
+                              fail_ok)
+    return json.loads(output)
+
+
+def port_create(client, network_ident, name=None, fail_ok=False):
+    if not name:
+        name = data_utils.rand_name('port')
+    output = client.port('create',
+                         '--network {0} -f json'.format(network_ident),
+                         name, fail_ok)
+    return json.loads(output)
+
+
+def port_delete(client, port_ident, fail_ok=False):
+    return client.port('delete', '', port_ident, fail_ok)
+
+
+def quota_set(client, params, project_id, fail_ok=False):
+    client.quota('set', params, project_id, fail_ok)
+
+
+def quota_show(client, project_id, fail_ok=False):
+    output = client.quota('show', '-f json', project_id, fail_ok)
+    return json.loads(output)
+
+
+def volume_create(client, name=None, size=1, fail_ok=False):
+    if not name:
+        name = data_utils.rand_name('volume')
+
+    output = client.volume('create',
+                           '--size {0} -f json'.format(size),
+                           name, fail_ok)
+
+    return json.loads(output)
+
+
+def volume_delete(client, volume_ident, fail_ok=False):
+    return client.volume('delete', '', volume_ident, fail_ok)
+
+
+def volume_show(client, volume_ident, fail_ok=False):
+    output = client.volume('show', '-f json', volume_ident, fail_ok)
+    return json.loads(output)
+
+
+def volume_transfer_request_accept(client, request_id, auth_key,
+                                   fail_ok=False):
+    output = client.volume('transfer request accept',
+                           '--auth-key {0} -f json'.format(auth_key),
+                           request_id, fail_ok)
+    return json.loads(output)
+
+
+def volume_transfer_request_create(client, volume_ident,
+                                   fail_ok=False):
+    output = client.volume('transfer request create', '-f json',
+                           volume_ident, fail_ok)
+    return json.loads(output)

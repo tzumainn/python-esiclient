@@ -18,6 +18,8 @@ import os
 from tempest.lib.cli import base
 from tempest.lib.common.utils import data_utils
 
+DEFAULT_CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'test.conf')
+
 
 class ESIBaseTestClass(base.ClientTestBase):
     @classmethod
@@ -29,6 +31,7 @@ class ESIBaseTestClass(base.ClientTestBase):
         cls.clients = {}
         cls._cls_cleanups = []
 
+        cls._init_functional_config(cls)
         cls._init_ironic_config(cls)
         cls._init_client(cls, 'admin', 'admin')
 
@@ -43,6 +46,13 @@ class ESIBaseTestClass(base.ClientTestBase):
         # initialize our clients, we need ClientTestBase's constructor to have
         # been called. We return nothing leave the job on to _init_clients().
         return {}
+
+    def _init_functional_config(self):
+        config_file_path = os.environ.get('ESICLIENT_TEST_CONFIG',
+                                          DEFAULT_CONFIG_FILE)
+        config = configparser.ConfigParser()
+        config.read(config_file_path)
+        self.config['functional'] = config['functional']
 
     def _init_ironic_config(self):
         venv_name = os.environ.get('VENV_NAME', default='functional')
@@ -163,9 +173,52 @@ class ESIBaseTestClass(base.ClientTestBase):
 
 
 class ESICLIClient(base.CLIClient):
+
     def baremetal(self, action, flags='', params='', fail_ok=False,
                   merge_stderr=False):
         return self.openstack('baremetal %s' % action, '',
+                              '%s %s' % (flags, params),
+                              fail_ok,
+                              merge_stderr)
+
+    def esi(self, action, flags='', params='', fail_ok=False,
+            merge_stderr=False):
+        return self.openstack('esi %s' % action, '',
+                              '%s %s' % (flags, params),
+                              fail_ok,
+                              merge_stderr)
+
+    def image(self, action, flags='', params='', fail_ok=False,
+              merge_stderr=False):
+        return self.openstack('image %s' % action, '',
+                              '%s %s' % (flags, params),
+                              fail_ok,
+                              merge_stderr)
+
+    def network(self, action, flags='', params='', fail_ok=False,
+                merge_stderr=False):
+        return self.openstack('network %s' % action, '',
+                              '%s %s' % (flags, params),
+                              fail_ok,
+                              merge_stderr)
+
+    def port(self, action, flags='', params='', fail_ok=False,
+             merge_stderr=False):
+        return self.openstack('port %s' % action, '',
+                              '%s %s' % (flags, params),
+                              fail_ok,
+                              merge_stderr)
+
+    def quota(self, action, flags='', params='', fail_ok=False,
+              merge_stderr=False):
+        return self.openstack('quota %s' % action, '',
+                              '%s %s' % (flags, params),
+                              fail_ok,
+                              merge_stderr)
+
+    def volume(self, action, flags='', params='', fail_ok=False,
+               merge_stderr=False):
+        return self.openstack('volume %s' % action, '',
                               '%s %s' % (flags, params),
                               fail_ok,
                               merge_stderr)
