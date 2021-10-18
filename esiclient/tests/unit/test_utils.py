@@ -14,7 +14,7 @@
 import mock
 from unittest import TestCase
 
-from esiclient.tests import utils as test_utils
+from esiclient.tests.unit import utils as test_utils
 from esiclient import utils
 
 
