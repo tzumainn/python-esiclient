@@ -1,0 +1,6 @@
+[functional]
+# REQUIRED FOR: test_node_network
+#test_node_ident = <name or uuid of node>
+
+# REQUIRED FOR: test_image
+#image_path = <path to image that can be used for image tests>

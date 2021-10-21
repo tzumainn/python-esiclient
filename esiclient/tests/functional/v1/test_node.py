@@ -52,16 +52,16 @@ class NodePowerTests(base.ESIBaseTestClass):
         node = utils.node_create(self.clients['admin'])
         self.addCleanup(utils.node_delete,
                         self.clients['admin'],
-                        identifier=node['name'])
+                        node['name'])
 
         utils.node_set(self.clients['admin'],
-                       identifier=node['name'],
-                       owner=self.projects['random']['id'])
+                       node['name'],
+                       'owner', self.projects['random']['id'])
 
         utils.node_power_on(self.clients['random-member'],
-                            identifier=node['name'])
+                            node['name'])
         utils.node_power_off(self.clients['random-member'],
-                             identifier=node['name'])
+                             node['name'])
 
     def test_lessee_can_node_power_on_off(self):
         """Tests lessee power funcitonality.
@@ -79,16 +79,16 @@ class NodePowerTests(base.ESIBaseTestClass):
         node = utils.node_create(self.clients['admin'])
         self.addCleanup(utils.node_delete,
                         self.clients['admin'],
-                        identifier=node['name'])
+                        node['name'])
 
         utils.node_set(self.clients['admin'],
-                       identifier=node['name'],
-                       lessee=self.projects['random']['id'])
+                       node['name'],
+                       'lessee', self.projects['random']['id'])
 
         utils.node_power_on(self.clients['random-member'],
-                            identifier=node['name'])
+                            node['name'])
         utils.node_power_off(self.clients['random-member'],
-                             identifier=node['name'])
+                             node['name'])
 
     def test_non_owner_lessee_cannot_node_power_on_off(self):
         """Tests non owner and non lessee power functionality.
@@ -105,17 +105,17 @@ class NodePowerTests(base.ESIBaseTestClass):
         node = utils.node_create(self.clients['admin'])
         self.addCleanup(utils.node_delete,
                         self.clients['admin'],
-                        identifier=node['name'])
+                        node['name'])
 
         self.assertRaises(exceptions.CommandFailed,
                           utils.node_power_on,
                           self.clients['random-member'],
-                          identifier=node['name'])
+                          node['name'])
 
         self.assertRaises(exceptions.CommandFailed,
                           utils.node_power_off,
                           self.clients['random-member'],
-                          identifier=node['name'])
+                          node['name'])
 
     def test_admin_can_node_power_on_off(self):
         """Tets admin power functionality.
@@ -133,7 +133,7 @@ class NodePowerTests(base.ESIBaseTestClass):
                                  name="owned")
         self.addCleanup(utils.node_delete,
                         self.clients['admin'],
-                        identifier=node['name'])
+                        node['name'])
 
-        utils.node_power_on(self.clients['admin'], identifier=node['name'])
-        utils.node_power_off(self.clients['admin'], identifier=node['name'])
+        utils.node_power_on(self.clients['admin'], node['name'])
+        utils.node_power_off(self.clients['admin'], node['name'])
