@@ -102,6 +102,13 @@ def esi_trunk_remove_network(client, trunk_ident, tagged_network_ident,
                       trunk_ident, fail_ok)
 
 
+def esi_node_volume_attach(client, network_ident, node_ident, volume_ident,
+                           fail_ok=False):
+    return client.esi('node volume attach',
+                      '--network %s' % network_ident, '{0} {1}'
+                      .format(node_ident, volume_ident), fail_ok)
+
+
 def image_create(client, image_path, name=None, visibility='public',
                  disk_format='qcow2', container_format='bare',
                  fail_ok=False):
@@ -257,7 +264,6 @@ def volume_create(client, name=None, size=1, fail_ok=False):
     output = client.volume('create',
                            '--size {0} -f json'.format(size),
                            name, fail_ok)
-
     return json.loads(output)
 
 
@@ -283,3 +289,11 @@ def volume_transfer_request_create(client, volume_ident,
     output = client.volume('transfer request create', '-f json',
                            volume_ident, fail_ok)
     return json.loads(output)
+
+
+def metalsmith_deploy(client, image_ident, network_ident,
+                      fail_ok=False):
+    return client.metalsmith('deploy', '',
+                             '--image {0} --network {1} --resource-class {2}'
+                             .format(image_ident, network_ident, 'baremetal'),
+                             fail_ok)
