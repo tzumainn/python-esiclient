@@ -29,6 +29,7 @@ class ESIBaseTestClass(base.ClientTestBase):
         cls.users = {}
         cls.projects = {}
         cls.clients = {}
+        cls.metalsmith_clients = {}
         cls._cls_cleanups = []
 
         cls._init_functional_config(cls)
@@ -114,6 +115,19 @@ class ESIBaseTestClass(base.ClientTestBase):
                 identity_api_version='3',
                 uri=self.config['auth_url']))
 
+    def _init_metalsmith_client(self, user, project):
+        # NOTE: metalsmith cli doesn't recognize "identity_api_version",
+        #       so metalsmith_client is created to call metalsmith commands.
+        self.metalsmith_clients[user] = (
+            MetalsmithCLIClient(
+                cli_dir=self.config['cli_dir'],
+                username=self.users[user]['name'],
+                password=self.users[user]['password'],
+                user_domain_name=self.users[user]['domain'],
+                tenant_name=self.projects[project]['name'],
+                project_domain_name=self.projects[project]['domain'],
+                uri=self.config['auth_url']))
+
     def _init_dummy_project(self, name, roles, parent=None):
         admin_client = self.clients['admin']
 
@@ -170,6 +184,7 @@ class ESIBaseTestClass(base.ClientTestBase):
                                        (username, project_name, role)])
 
             self._init_client(self, client_name, name)
+            self._init_metalsmith_client(self, client_name, name)
 
 
 class ESICLIClient(base.CLIClient):
@@ -222,3 +237,13 @@ class ESICLIClient(base.CLIClient):
                               '%s %s' % (flags, params),
                               fail_ok,
                               merge_stderr)
+
+
+class MetalsmithCLIClient(base.CLIClient):
+
+    def metalsmith(self, action, flags='', params='', fail_ok=False,
+                   merge_stderr=False):
+        return self.cmd_with_auth('metalsmith', ' %s' % action, '',
+                                  '%s %s' % (flags, params),
+                                  fail_ok,
+                                  merge_stderr)
