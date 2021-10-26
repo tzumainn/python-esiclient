@@ -27,7 +27,7 @@ class MetalsmithDeployTests(base.ESIBaseTestClass):
     def setUpClass(cls):
         super(MetalsmithDeployTests, cls).setUpClass()
 
-        cls._init_dummy_project(cls, 'random', 'member')
+        cls._init_dummy_project(cls, 'project1', 'member')
 
     def setUp(self):
         super(MetalsmithDeployTests, self).setUp()
@@ -35,15 +35,94 @@ class MetalsmithDeployTests(base.ESIBaseTestClass):
         self.metalsmith_clients = MetalsmithDeployTests.metalsmith_clients
         self.users = MetalsmithDeployTests.users
         self.projects = MetalsmithDeployTests.projects
-        if 'user_image_ident' not in \
-                MetalsmithDeployTests.config['functional']:
-            self.fail('user_image_ident must be specified in test config')
-        self.user_image_ident = MetalsmithDeployTests.\
-            config['functional']['user_image_ident']
-        self.network = utils.network_create(self.clients['admin'])
-        self.addCleanup(utils.network_delete,
+        self.config = MetalsmithDeployTests.config
+
+        if 'test_node_ident' not in self.config['functional']:
+            self.fail('test_node_ident must be specified in test config')
+        if 'provisioning_network_ident' not in self.config['functional']:
+            self.fail(
+                'provisioning_network_ident must be specified in test config')
+        if 'provisioning_image_ident' not in self.config['functional']:
+            self.fail(
+                'provisioning_image_ident must be specified in test config')
+
+        self.node = self.config['functional']['test_node_ident']
+        self.provisioning_network_ident = \
+            self.config['functional']['provisioning_network_ident']
+        self.provisioning_image_ident = \
+            self.config['functional']['provisioning_image_ident']
+
+    def test_owner_deploy_node_metalsmith(self):
+        """Tests owner metalsmith node deploy functionality.
+
+        Tests that a project which is set to a node's 'owner'
+            can run `metalsmith deploy <image> <node>`
+            Test steps:
+            1) Admin sets owner of node to project1
+            2) Project1 checks that the node state is 'available'
+            3) Project1 successfully runs
+               `metalsmith deploy <image> <node>`
+            4) (cleanup) Undeploy the node
+            5) (cleanup) Reset the node owner
+
+        """
+        node = utils.node_show(self.clients['admin'], self.node)
+        utils.node_set(self.clients['admin'],
+                       self.node,
+                       'owner',
+                       self.projects['project1']['id'])
+        self.addCleanup(utils.node_set,
                         self.clients['admin'],
-                        self.network['name'])
+                        self.node,
+                        'owner', node['owner'])
+
+        node = utils.node_show(self.clients['project1-member'], self.node)
+        if node['provision_state'] != 'available':
+            utils.node_set_provision_state(self.clients['project1-member'],
+                                           node['name'], 'provide')
+
+        utils.metalsmith_deploy(self.metalsmith_clients['project1-member'],
+                                self.provisioning_image_ident,
+                                self.provisioning_network_ident)
+        self.addCleanup(utils.node_set_provision_state,
+                        self.clients['admin'],
+                        node['name'], 'undeploy')
+
+    def test_lessee_deploy_node_metalsmith(self):
+        """Tests lessee metalsmith node deploy functionality.
+
+        Tests that a project which is set to a node's 'lessee'
+            can run `metalsmith deploy <image> <node>`
+            Test steps:
+            1) Admin sets lessee of node to project1
+            2) Project1 checks that the node state is 'available'
+            3) Project1 successfully runs
+               `metalsmith deploy <image> <node>`
+            4) (cleanup) Undeploy the node
+            5) (cleanup) Reset the node lessee
+
+        """
+        node = utils.node_show(self.clients['admin'], self.node)
+        utils.node_set(self.clients['admin'],
+                       self.node,
+                       'lessee',
+                       self.projects['project1']['id'])
+        self.addCleanup(utils.node_set,
+                        self.clients['admin'],
+                        self.node,
+                        'lessee', node['lessee'])
+
+        node = utils.node_show(self.clients['project1-member'], self.node)
+        if node['provision_state'] != 'available':
+            utils.node_set_provision_state(self.clients['project1-member'],
+                                           node['name'], 'provide')
+
+        utils.metalsmith_deploy(self.metalsmith_clients['project1-member'],
+                                self.provisioning_image_ident,
+                                self.provisioning_network_ident)
+        self.addCleanup(utils.node_set_provision_state,
+                        self.clients['admin'],
+                        node['name'], 'undeploy')
 
     def test_non_owner_lessee_cannot_deploy_node_metalsmith(self):
         """Tests non owner/lessee metalsmith node deploy functionality.
@@ -51,25 +130,18 @@ class MetalsmithDeployTests(base.ESIBaseTestClass):
         Tests that a project which is not set to a node's 'owner' nor
             'lessee' cannot run `metalsmith deploy <image> <node>`
             Test steps:
-            1) Create a node and set the state to 'available'
+            1) Check that the node state is 'available'
             2) Check that the project cannot run
                `metalsmith deploy <image> <node>`
-            3) (cleanup) Delete the node created in step 1
 
         """
-
-        node = utils.node_create(self.clients['admin'])
-        if node['provision_state'] != 'manageable':
+        node = utils.node_show(self.clients['admin'], self.node)
+        if node['provision_state'] != 'available':
             utils.node_set_provision_state(self.clients['admin'],
-                                           node['name'], 'manage')
-        utils.node_set_provision_state(self.clients['admin'],
-                                       node['name'], 'provide')
-
-        self.addCleanup(utils.node_delete,
-                        self.clients['admin'],
-                        node['name'])
+                                           node['name'], 'provide')
 
         self.assertRaises(exceptions.CommandFailed,
                           utils.metalsmith_deploy,
-                          self.metalsmith_clients['random-member'],
-                          self.user_image_ident, self.network['name'])
+                          self.metalsmith_clients['project1-member'],
+                          self.provisioning_image_ident,
+                          self.provisioning_network_ident)
