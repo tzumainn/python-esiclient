@@ -102,10 +102,10 @@ def esi_trunk_remove_network(client, trunk_ident, tagged_network_ident,
                       trunk_ident, fail_ok)
 
 
-def esi_node_volume_attach(client, network_ident, node_ident, volume_ident,
+def esi_node_volume_attach(client, port_ident, node_ident, volume_ident,
                            fail_ok=False):
     return client.esi('node volume attach',
-                      '--network %s' % network_ident, '{0} {1}'
+                      '--port %s' % port_ident, '{0} {1}'
                       .format(node_ident, volume_ident), fail_ok)
 
 
@@ -289,6 +289,16 @@ def volume_transfer_request_create(client, volume_ident,
     output = client.volume('transfer request create', '-f json',
                            volume_ident, fail_ok)
     return json.loads(output)
+
+
+def volume_transfer_request_create_and_accept(
+        from_client, to_client, volume_ident, fail_ok=False):
+    transfer_request = volume_transfer_request_create(
+        from_client, volume_ident, fail_ok)
+    transfer_accept = volume_transfer_request_accept(
+        to_client, transfer_request['id'], transfer_request['auth_key'],
+        fail_ok)
+    return transfer_accept
 
 
 def metalsmith_deploy(client, image_ident, network_ident,
