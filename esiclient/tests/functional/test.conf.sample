@@ -1,5 +1,5 @@
 [functional]
-# REQUIRED FOR: test_node_network, test_metalsmith, test_node_volume
+# REQUIRED FOR: test_node_network, test_metalsmith, test_node_volume, test_node
 #test_node_ident = <name or uuid of node>
 
 # REQUIRED FOR: test_image

@@ -180,6 +180,20 @@ def network_rbac_delete(client, network_rbac_ident, fail_ok=False):
                           network_rbac_ident, fail_ok)
 
 
+def node_console_enable(client, node_ident, fail_ok=False):
+    return client.baremetal('node console enable', '', node_ident, fail_ok)
+
+
+def node_console_disable(client, node_ident, fail_ok=False):
+    return client.baremetal('node console disable', '', node_ident, fail_ok)
+
+
+def node_console_show(client, node_ident, fail_ok=False):
+    output = client.baremetal('node console show', '-f json', node_ident,
+                              fail_ok)
+    return json.loads(output)
+
+
 def node_create(client, driver='fake-hardware', name=None, fail_ok=False,
                 **kwargs):
     if not name:
