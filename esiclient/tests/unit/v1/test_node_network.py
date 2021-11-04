@@ -318,8 +318,6 @@ class TestAttach(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.network.find_port.\
             assert_called_once_with("node1-port")
-        self.app.client_manager.network.get_network.\
-            assert_called_once_with("network_uuid")
         self.app.client_manager.baremetal.node.vif_attach.\
             assert_called_once_with('node1', self.neutron_port.id)
         mock_gfnifp.assert_called_once
@@ -349,8 +347,6 @@ class TestAttach(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.network.find_port.\
             assert_called_once_with("node1-port")
-        self.app.client_manager.network.get_network.\
-            assert_called_once_with("network_uuid")
         self.app.client_manager.baremetal.port.get_by_address.\
             assert_called_once_with('bb:bb:bb:bb:bb:bb')
         self.app.client_manager.baremetal.node.vif_attach.\
@@ -378,106 +374,6 @@ class TestAttach(base.TestCommand):
         self.assertRaisesRegex(
             exceptions.CommandError,
             'ERROR: You must specify either network or port',
-            self.cmd.take_action, parsed_args)
-
-    @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["node2"],
-                              ["2.2.2.2"]),
-                autospec=True)
-    def test_take_action_adopt(self, mock_gfnifp):
-        self.app.client_manager.baremetal.node.get.\
-            return_value = self.node_manageable
-        self.app.client_manager.baremetal.port.list.\
-            return_value = [self.port1, self.port2]
-
-        def mock_node_set_provision_state(node_uuid, state):
-            self.node_manageable.provision_state = "active"
-
-        self.app.client_manager.baremetal.node.set_provision_state.\
-            side_effect = mock_node_set_provision_state
-
-        arglist = ['node1', '--network', 'test_network']
-        verifylist = []
-
-        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
-
-        results = self.cmd.take_action(parsed_args)
-        expected = (
-            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port", "test_network",
-             "2.2.2.2"]
-        )
-        self.assertEqual(expected, results)
-        self.app.client_manager.network.create_port.\
-            assert_called_once_with(name=self.node.name,
-                                    network_id=self.network.id,
-                                    device_owner='baremetal:none')
-        self.app.client_manager.baremetal.node.vif_attach.\
-            assert_called_once_with('node1', self.neutron_port.id)
-        self.app.client_manager.baremetal.node.vif_attach.\
-            assert_called_once_with('node1', self.neutron_port.id)
-        self.app.client_manager.baremetal.node.set_provision_state.\
-            assert_called_once_with('node1', 'adopt')
-        self.assertEqual(
-            self.app.client_manager.baremetal.node.update.call_count, 2)
-        mock_gfnifp.assert_called_once
-
-    @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["node2"],
-                              ["2.2.2.2"]),
-                autospec=True)
-    def test_take_action_adopt_no_update(self, mock_gfnifp):
-        self.app.client_manager.baremetal.node.get.\
-            return_value = self.node_manageable_instance_info
-        self.app.client_manager.baremetal.port.list.\
-            return_value = [self.port1, self.port2]
-
-        def mock_node_set_provision_state(node_uuid, state):
-            self.node_manageable_instance_info.provision_state = "active"
-
-        self.app.client_manager.baremetal.node.set_provision_state.\
-            side_effect = mock_node_set_provision_state
-
-        arglist = ['node1', '--network', 'test_network']
-        verifylist = []
-
-        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
-
-        results = self.cmd.take_action(parsed_args)
-        expected = (
-            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port", "test_network",
-             "2.2.2.2"]
-        )
-        self.assertEqual(expected, results)
-        self.app.client_manager.network.create_port.\
-            assert_called_once_with(name=self.node.name,
-                                    network_id=self.network.id,
-                                    device_owner='baremetal:none')
-        self.app.client_manager.baremetal.node.vif_attach.\
-            assert_called_once_with('node1', self.neutron_port.id)
-        self.app.client_manager.baremetal.node.vif_attach.\
-            assert_called_once_with('node1', self.neutron_port.id)
-        self.app.client_manager.baremetal.node.set_provision_state.\
-            assert_called_once_with('node1', 'adopt')
-        self.assertEqual(
-            self.app.client_manager.baremetal.node.update.call_count, 0)
-        mock_gfnifp.assert_called_once
-
-    def test_take_action_node_state_exception(self):
-        self.app.client_manager.baremetal.node.get.\
-            return_value = self.node_available
-        self.app.client_manager.baremetal.port.list.\
-            return_value = [self.port1, self.port2]
-
-        arglist = ['node1', '--network', 'test_network']
-        verifylist = []
-
-        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
-
-        self.assertRaisesRegex(
-            exceptions.CommandError,
-            'ERROR: Node node1 must be in the active state',
             self.cmd.take_action, parsed_args)
 
     def test_take_action_port_free_exception(self):
