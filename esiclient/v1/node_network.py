@@ -18,10 +18,6 @@ from osc_lib.i18n import _
 
 from esiclient import utils
 
-ACTIVE = 'active'
-ADOPT = 'adopt'
-MANAGEABLE = 'manageable'
-
 
 class List(command.Lister):
     """List networks attached to node"""
@@ -131,39 +127,6 @@ class Attach(command.ShowOne):
 
         node = ironic_client.node.get(node_uuid)
 
-        if node.provision_state == MANAGEABLE:
-            # adopt the node
-            node_update = []
-            node_revert = []
-            if 'image_source' not in node.instance_info:
-                temp_image = node.driver_info['deploy_ramdisk']
-                node_update.append({'path': '/instance_info/image_source',
-                                    'value': temp_image,
-                                    'op': 'add'})
-                node_revert.append({'path': '/instance_info/image_source',
-                                    'op': 'remove'})
-            if 'capabilities' not in node.instance_info:
-                node_update.append({'path': '/instance_info/capabilities',
-                                    'value': "{\"boot_option\": \"local\"}",
-                                    'op': 'add'})
-                node_revert.append({'path': '/instance_info/capabilities',
-                                    'op': 'remove'})
-
-            try:
-                if len(node_update) > 0:
-                    ironic_client.node.update(node_uuid, node_update)
-                ironic_client.node.set_provision_state(node_uuid, ADOPT)
-            finally:
-                if len(node_revert) > 0:
-                    ironic_client.node.update(node_uuid, node_revert)
-            # reload node information
-            node = ironic_client.node.get(node_uuid)
-
-        if node.provision_state != ACTIVE:
-            raise exceptions.CommandError(
-                "ERROR: Node {0} must be in the active state".format(
-                    node.name))
-
         if parsed_args.mac_address:
             bp = ironic_client.port.get_by_address(parsed_args.mac_address)
             vif_info = {'port_uuid': bp.uuid}
@@ -188,7 +151,6 @@ class Attach(command.ShowOne):
             print("Attaching port {1} to node {0}{2}".format(
                 node.name, port.name, mac_string))
             ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
-            network = neutron_client.get_network(port.network_id)
         else:
             print("Attaching network {1} to node {0}{2}".format(
                 node.name, network.name, mac_string))
