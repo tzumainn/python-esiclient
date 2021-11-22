@@ -86,6 +86,8 @@ class TestAttach(base.TestCommand):
             return_value = self.neutron_port
         self.app.client_manager.network.find_port.\
             return_value = self.neutron_port
+        self.app.client_manager.network.ports.\
+            return_value = []
         self.app.client_manager.baremetal.node.set_provision_state.\
             return_value = self.node
         self.app.client_manager.baremetal.volume.volume_connector.create.\
@@ -143,7 +145,7 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.volume_target.create.\
             assert_called_once()
         self.app.client_manager.network.create_port.\
-            assert_called_once_with(name='volume-node1-volume1',
+            assert_called_once_with(name='esi-node1-test_network-volume',
                                     network_id=self.network.id,
                                     device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
@@ -199,7 +201,7 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.volume_target.create.\
             assert_called_once()
         self.app.client_manager.network.create_port.\
-            assert_called_once_with(name='volume-node1-volume1',
+            assert_called_once_with(name='esi-node1-test_network-volume',
                                     network_id=self.network.id,
                                     device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
@@ -414,7 +416,7 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.volume_target.create.\
             assert_called_once()
         self.app.client_manager.network.create_port.\
-            assert_called_once_with(name='volume-node1-volume1',
+            assert_called_once_with(name='esi-node1-test_network-volume',
                                     network_id=self.network.id,
                                     device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\
@@ -470,7 +472,7 @@ class TestAttach(base.TestCommand):
         self.app.client_manager.baremetal.volume_target.create.\
             assert_not_called()
         self.app.client_manager.network.create_port.\
-            assert_called_once_with(name='volume-node1-volume1',
+            assert_called_once_with(name='esi-node1-test_network-volume',
                                     network_id=self.network.id,
                                     device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\

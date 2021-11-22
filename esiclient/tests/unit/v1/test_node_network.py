@@ -263,6 +263,8 @@ class TestAttach(base.TestCommand):
             return_value = self.neutron_port
         self.app.client_manager.network.get_port.\
             return_value = self.neutron_port
+        self.app.client_manager.network.ports.\
+            return_value = []
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
                 return_value=(["test_network"], ["node2"],
@@ -287,7 +289,7 @@ class TestAttach(base.TestCommand):
         )
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
-            assert_called_once_with(name=self.node.name,
+            assert_called_once_with(name='esi-node1-test_network',
                                     network_id=self.network.id,
                                     device_owner='baremetal:none')
         self.app.client_manager.baremetal.node.vif_attach.\

@@ -154,9 +154,8 @@ class Attach(command.ShowOne):
         else:
             print("Attaching network {1} to node {0}{2}".format(
                 node.name, network.name, mac_string))
-            port = neutron_client.create_port(name=node.name,
-                                              network_id=network.id,
-                                              device_owner='baremetal:none')
+            port_name = utils.get_port_name(network, prefix=node.name)
+            port = utils.get_or_create_port(port_name, network, neutron_client)
             ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
             port = neutron_client.get_port(port.id)
 

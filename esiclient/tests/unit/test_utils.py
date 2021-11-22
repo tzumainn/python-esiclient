@@ -160,3 +160,74 @@ class TestGetFullNetworkInfoFromPort(TestCase):
             (['test_network (777)'], ['test_port'], ['77.77.77.77']),
             results
         )
+
+
+class TestGetPortName(TestCase):
+
+    def setUp(self):
+        super(TestGetPortName, self).setUp()
+        self.network = test_utils.create_mock_object({
+            "id": "network_uuid",
+            "name": "test_network",
+            "provider_segmentation_id": "777"
+        })
+
+    def test_get_port_name(self):
+        name = utils.get_port_name(self.network)
+        self.assertEqual('esi-test_network', name)
+
+    def test_get_port_name_prefix(self):
+        name = utils.get_port_name(self.network, prefix='foo')
+        self.assertEqual('esi-foo-test_network', name)
+
+    def test_get_port_name_suffix(self):
+        name = utils.get_port_name(self.network, suffix='bar')
+        self.assertEqual('esi-test_network-bar', name)
+
+    def test_get_port_name_prefix_and_suffix(self):
+        name = utils.get_port_name(self.network, prefix='foo', suffix='bar')
+        self.assertEqual('esi-foo-test_network-bar', name)
+
+
+class TestGetOrCreatePort(TestCase):
+
+    def setUp(self):
+        super(TestGetOrCreatePort, self).setUp()
+        self.port_name = 'test_port'
+        self.network = test_utils.create_mock_object({
+            "id": "network_uuid",
+            "name": "test_network",
+            "provider_segmentation_id": "777"
+        })
+        self.port = test_utils.create_mock_object({
+            "id": "port_uuid",
+            "name": self.port_name,
+            "status": "DOWN"
+        })
+
+        self.neutron_client = mock.Mock()
+        self.neutron_client.create_port.return_value = None
+
+    def test_get_or_create_port_no_match(self):
+        self.neutron_client.ports.return_value = []
+
+        utils.get_or_create_port(self.port_name, self.network,
+                                 self.neutron_client)
+        self.neutron_client.create_port.\
+            assert_called_once_with(name=self.port_name,
+                                    network_id=self.network.id,
+                                    device_owner='baremetal:none')
+
+    def test_get_or_create_port_one_match(self):
+        self.neutron_client.ports.return_value = [self.port]
+
+        utils.get_or_create_port(self.port_name, self.network,
+                                 self.neutron_client)
+        self.neutron_client.create_port.assert_not_called()
+
+    def test_get_or_create_port_many_matches(self):
+        self.neutron_client.ports.return_value = [self.port, self.port]
+
+        utils.get_or_create_port(self.port_name, self.network,
+                                 self.neutron_client)
+        self.neutron_client.create_port.assert_not_called()

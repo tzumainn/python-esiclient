@@ -18,6 +18,8 @@ from osc_lib import exceptions
 from osc_lib.i18n import _
 from oslo_utils import uuidutils
 
+from esiclient import utils
+
 
 AVAILABLE = 'available'
 ACTIVE = 'active'
@@ -146,10 +148,10 @@ class Attach(command.ShowOne):
         # attach node to storage network
         if not port:
             # create port if needed
-            port = neutron_client.create_port(
-                name="volume-%s-%s" % (node.name, volume.name),
-                network_id=network.id,
-                device_owner='baremetal:none')
+            port_name = utils.get_port_name(
+                network, prefix=node.name, suffix='volume')
+            port = utils.get_or_create_port(port_name, network, neutron_client)
+
         ironic_client.node.vif_attach(node_uuid, port.id)
 
         # deploy

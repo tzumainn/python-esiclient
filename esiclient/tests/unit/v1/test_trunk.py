@@ -227,6 +227,9 @@ class TestCreate(base.TestCommand):
         self.app.client_manager.network.create_port.\
             side_effect = mock_create_port
 
+        self.app.client_manager.network.ports.\
+            return_value = []
+
         self.app.client_manager.network.create_trunk.\
             return_value = self.trunk
 
@@ -253,13 +256,13 @@ class TestCreate(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.network.create_port.\
             assert_has_calls([
-                mock.call(name="trunk-network1-trunk-port",
+                mock.call(name="esi-trunk-network1-trunk-port",
                           network_id="network_uuid_1",
                           device_owner='baremetal:none'),
-                mock.call(name="trunk-network2-sub-port",
+                mock.call(name="esi-trunk-network2-sub-port",
                           network_id="network_uuid_2",
                           device_owner='baremetal:none'),
-                mock.call(name="trunk-network3-sub-port",
+                mock.call(name="esi-trunk-network3-sub-port",
                           network_id="network_uuid_3",
                           device_owner='baremetal:none')
             ])
@@ -422,6 +425,9 @@ class TestAddNetwork(base.TestCommand):
         self.app.client_manager.network.create_port.\
             side_effect = mock_create_port
 
+        self.app.client_manager.network.ports.\
+            return_value = []
+
         self.app.client_manager.network.add_trunk_subports.\
             return_value = self.trunk
 
@@ -450,10 +456,10 @@ class TestAddNetwork(base.TestCommand):
             assert_called_once_with("trunk")
         self.app.client_manager.network.create_port.\
             assert_has_calls([
-                mock.call(name="trunk-network2-sub-port",
+                mock.call(name="esi-trunk-network2-sub-port",
                           network_id="network_uuid_2",
                           device_owner='baremetal:none'),
-                mock.call(name="trunk-network3-sub-port",
+                mock.call(name="esi-trunk-network3-sub-port",
                           network_id="network_uuid_3",
                           device_owner='baremetal:none')
             ])

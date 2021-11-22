@@ -82,22 +82,19 @@ class Create(command.ShowOne):
         network = neutron_client.find_network(parsed_args.native_network)
         tagged_networks = parsed_args.tagged_networks
 
-        trunk_port = neutron_client.create_port(
-            name="{0}-{1}-trunk-port".format(trunk_name, network.name),
-            network_id=network.id,
-            device_owner='baremetal:none'
-        )
+        trunk_port_name = utils.get_port_name(
+            network, prefix=trunk_name, suffix='trunk-port')
+        trunk_port = utils.get_or_create_port(
+            trunk_port_name, network, neutron_client)
 
         sub_ports = []
         for tagged_network_name in tagged_networks:
             tagged_network = neutron_client.find_network(
                 tagged_network_name)
-            sub_port = neutron_client.create_port(
-                name="{0}-{1}-sub-port".format(trunk_name,
-                                               tagged_network.name),
-                network_id=tagged_network.id,
-                device_owner='baremetal:none'
-            )
+            sub_port_name = utils.get_port_name(
+                tagged_network, prefix=trunk_name, suffix='sub-port')
+            sub_port = utils.get_or_create_port(
+                sub_port_name, tagged_network, neutron_client)
             sub_ports.append({
                 'port_id': sub_port.id,
                 'segmentation_type': 'vlan',
@@ -163,12 +160,10 @@ class AddNetwork(command.ShowOne):
                 raise exceptions.CommandError(
                     "ERROR: no network named {0}".format(tagged_network_name))
 
-            sub_port = neutron_client.create_port(
-                name="{0}-{1}-sub-port".format(trunk.name,
-                                               tagged_network.name),
-                network_id=tagged_network.id,
-                device_owner='baremetal:none'
-            )
+            sub_port_name = utils.get_port_name(
+                tagged_network, prefix=trunk.name, suffix='sub-port')
+            sub_port = utils.get_or_create_port(
+                sub_port_name, tagged_network, neutron_client)
             sub_ports.append({
                 'port_id': sub_port.id,
                 'segmentation_type': 'vlan',

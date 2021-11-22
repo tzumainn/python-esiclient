@@ -67,3 +67,26 @@ def get_full_network_info_from_port(port, client):
             port_names.append(subport.name)
 
     return network_names, port_names, fixed_ips
+
+
+def get_port_name(network, prefix=None, suffix=None):
+    port_name = network.name
+    if prefix:
+        port_name = "{0}-{1}".format(prefix, port_name)
+    if suffix:
+        port_name = "{0}-{1}".format(port_name, suffix)
+    port_name = "esi-{0}".format(port_name)
+    return port_name
+
+
+def get_or_create_port(port_name, network, client):
+    ports = list(client.ports(name=port_name, status='DOWN'))
+    if len(ports) > 0:
+        port = ports[0]
+    else:
+        port = client.create_port(
+            name=port_name,
+            network_id=network.id,
+            device_owner='baremetal:none'
+        )
+    return port
