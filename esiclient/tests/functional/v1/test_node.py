@@ -292,7 +292,7 @@ class NodeConsoleTests(base.ESIBaseTestClass):
     def test_random_cannot_enable_console(self):
         """Tests random project console functionality.
 
-        Tests that a random project cannot perform the steps to setup an 
+        Tests that a random project cannot perform the steps to setup an
         ipmitool-socat serial console.
 
         Test steps:
