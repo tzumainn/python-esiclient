@@ -21,6 +21,7 @@ class MDCBaremetalNodeList(command.Lister):
     """List baremetal nodes from multiple OpenStack instances"""
 
     log = logging.getLogger(__name__ + ".List")
+    auth_required = False
 
     def get_parser(self, prog_name):
         parser = super(MDCBaremetalNodeList, self).get_parser(prog_name)
