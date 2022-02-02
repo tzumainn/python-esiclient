@@ -27,7 +27,7 @@ class TestMDCBaremetalNodeList(base.TestCommand):
         class FakeConfig(object):
 
             def __init__(self, name, region):
-                self._name = name
+                self.name = name
                 self.config = {'region_name': region}
 
         self.cloud1 = FakeConfig('esi', 'regionOne')
@@ -76,16 +76,16 @@ class TestMDCBaremetalNodeList(base.TestCommand):
             ['Cloud', 'Region', 'UUID', 'Name', 'Instance UUID', 'Power State',
              'Provisioning State', 'Maintenance'],
             [
-                [self.cloud1._name, self.cloud1.config['region_name'],
+                [self.cloud1.name, self.cloud1.config['region_name'],
                  "node_uuid_1", "node1", "instance_uuid_1", "off", "active",
                  False],
-                [self.cloud2._name, self.cloud2.config['region_name'],
+                [self.cloud2.name, self.cloud2.config['region_name'],
                  "node_uuid_2", "node2", "instance_uuid_2", "off", "active",
                  False],
-                [self.cloud3._name, self.cloud3.config['region_name'],
+                [self.cloud3.name, self.cloud3.config['region_name'],
                  "node_uuid_3", "node3", "instance_uuid_3", "off", "active",
                  False],
-                [self.cloud3._name, self.cloud3.config['region_name'],
+                [self.cloud3.name, self.cloud3.config['region_name'],
                  "node_uuid_4", "node4", "instance_uuid_4", "off", "active",
                  False],
             ]
@@ -116,10 +116,10 @@ class TestMDCBaremetalNodeList(base.TestCommand):
             ['Cloud', 'Region', 'UUID', 'Name', 'Instance UUID', 'Power State',
              'Provisioning State', 'Maintenance'],
             [
-                [self.cloud1._name, self.cloud1.config['region_name'],
+                [self.cloud1.name, self.cloud1.config['region_name'],
                  "node_uuid_1", "node1", "instance_uuid_1", "off", "active",
                  False],
-                [self.cloud2._name, self.cloud2.config['region_name'],
+                [self.cloud2.name, self.cloud2.config['region_name'],
                  "node_uuid_2", "node2", "instance_uuid_2", "off", "active",
                  False],
             ]
