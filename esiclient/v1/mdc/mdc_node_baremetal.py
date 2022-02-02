@@ -41,21 +41,17 @@ class MDCBaremetalNodeList(command.Lister):
                    'Power State', 'Provisioning State', 'Maintenance']
         data = []
 
-        cloud_filter = parsed_args.clouds or []
-
         cloud_regions = openstack.config.loader.OpenStackConfig().\
             get_all_clouds()
-
+        if parsed_args.clouds:
+            cloud_regions = filter(lambda c: c.name in parsed_args.clouds,
+                                   cloud_regions)
         for c in cloud_regions:
-
-            if cloud_filter and c._name not in cloud_filter:
-                continue
-
-            nodes = openstack.connect(cloud=c._name,
+            nodes = openstack.connect(cloud=c.name,
                                       region=c.config['region_name']
                                       ).list_machines()
             for n in nodes:
-                data.append([c._name, c.config['region_name'],
+                data.append([c.name, c.config['region_name'],
                             n.uuid, n.name, n.instance_uuid, n.power_state,
                             n.provision_state, n.maintenance])
 
