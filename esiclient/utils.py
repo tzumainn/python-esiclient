@@ -69,8 +69,8 @@ def get_full_network_info_from_port(port, client):
     return network_names, port_names, fixed_ips
 
 
-def get_port_name(network, prefix=None, suffix=None):
-    port_name = network.name
+def get_port_name(network_name, prefix=None, suffix=None):
+    port_name = network_name
     if prefix:
         port_name = "{0}-{1}".format(prefix, port_name)
     if suffix:
