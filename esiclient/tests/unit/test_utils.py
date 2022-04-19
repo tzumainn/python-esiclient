@@ -173,19 +173,19 @@ class TestGetPortName(TestCase):
         })
 
     def test_get_port_name(self):
-        name = utils.get_port_name(self.network)
+        name = utils.get_port_name(self.network.name)
         self.assertEqual('esi-test_network', name)
 
     def test_get_port_name_prefix(self):
-        name = utils.get_port_name(self.network, prefix='foo')
+        name = utils.get_port_name(self.network.name, prefix='foo')
         self.assertEqual('esi-foo-test_network', name)
 
     def test_get_port_name_suffix(self):
-        name = utils.get_port_name(self.network, suffix='bar')
+        name = utils.get_port_name(self.network.name, suffix='bar')
         self.assertEqual('esi-test_network-bar', name)
 
     def test_get_port_name_prefix_and_suffix(self):
-        name = utils.get_port_name(self.network, prefix='foo', suffix='bar')
+        name = utils.get_port_name(self.network.name, prefix='foo', suffix='bar')
         self.assertEqual('esi-foo-test_network-bar', name)
 
 

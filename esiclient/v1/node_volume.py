@@ -149,7 +149,7 @@ class Attach(command.ShowOne):
         if not port:
             # create port if needed
             port_name = utils.get_port_name(
-                network, prefix=node.name, suffix='volume')
+                network.name, prefix=node.name, suffix='volume')
             port = utils.get_or_create_port(port_name, network, neutron_client)
 
         ironic_client.node.vif_attach(node_uuid, port.id)

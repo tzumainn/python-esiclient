@@ -83,7 +83,7 @@ class Create(command.ShowOne):
         tagged_networks = parsed_args.tagged_networks
 
         trunk_port_name = utils.get_port_name(
-            network, prefix=trunk_name, suffix='trunk-port')
+            network.name, prefix=trunk_name, suffix='trunk-port')
         trunk_port = utils.get_or_create_port(
             trunk_port_name, network, neutron_client)
 
@@ -92,7 +92,7 @@ class Create(command.ShowOne):
             tagged_network = neutron_client.find_network(
                 tagged_network_name)
             sub_port_name = utils.get_port_name(
-                tagged_network, prefix=trunk_name, suffix='sub-port')
+                tagged_network.name, prefix=trunk_name, suffix='sub-port')
             sub_port = utils.get_or_create_port(
                 sub_port_name, tagged_network, neutron_client)
             sub_ports.append({
@@ -161,7 +161,7 @@ class AddNetwork(command.ShowOne):
                     "ERROR: no network named {0}".format(tagged_network_name))
 
             sub_port_name = utils.get_port_name(
-                tagged_network, prefix=trunk.name, suffix='sub-port')
+                tagged_network.name, prefix=trunk.name, suffix='sub-port')
             sub_port = utils.get_or_create_port(
                 sub_port_name, tagged_network, neutron_client)
             sub_ports.append({
@@ -220,10 +220,10 @@ class RemoveNetwork(command.ShowOne):
 
         sub_ports = []
         for tagged_network_name in tagged_networks:
-            sub_port = neutron_client.find_port(
-                "{0}-{1}-sub-port".format(trunk.name,
-                                          tagged_network_name),
-            )
+            sub_port_name = utils.get_port_name(
+                tagged_network_name, prefix=trunk.name, suffix='sub-port')
+
+            sub_port = neutron_client.find_port(sub_port_name)
             if not sub_port:
                 raise exceptions.CommandError(
                     "ERROR: {1} is not attached to {0}".format(

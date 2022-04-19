@@ -585,9 +585,9 @@ class TestRemoveNetwork(base.TestCommand):
         verifylist = []
 
         def mock_find_port(port_name):
-            if port_name == "trunk-network2-sub-port":
+            if port_name == "esi-trunk-network2-sub-port":
                 return self.subport2
-            if port_name == "trunk-network3-sub-port":
+            if port_name == "esi-trunk-network3-sub-port":
                 return self.subport3
             return None
         self.app.client_manager.network.find_port.\
@@ -601,8 +601,8 @@ class TestRemoveNetwork(base.TestCommand):
             assert_called_once_with("trunk")
         self.app.client_manager.network.find_port.\
             assert_has_calls([
-                mock.call("trunk-network2-sub-port"),
-                mock.call("trunk-network3-sub-port")
+                mock.call("esi-trunk-network2-sub-port"),
+                mock.call("esi-trunk-network3-sub-port")
             ])
         self.app.client_manager.network.delete_trunk_subports.\
             assert_called_once_with(
@@ -648,7 +648,7 @@ class TestRemoveNetwork(base.TestCommand):
         self.app.client_manager.network.find_trunk.\
             assert_called_once_with("trunk")
         self.app.client_manager.network.find_port.\
-            assert_called_once_with("trunk-network2-sub-port")
+            assert_called_once_with("esi-trunk-network2-sub-port")
         self.app.client_manager.network.delete_trunk_subports.\
             assert_not_called()
         self.app.client_manager.network.delete_port.\
