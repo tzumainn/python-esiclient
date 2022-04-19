@@ -86,7 +86,7 @@ class ESIBaseTestClass(base.ClientTestBase):
                     if x is not None:
                         auth_opts[opt] = x
                     else:
-                        raise configparser.NoOptionerror
+                        raise configparser.NoOptionError
         except (configparser.NoOptionError):
             self.fail("Missing option %s in configuration file." % opt)
 
