@@ -57,9 +57,6 @@ class NodeNetworkTests(base.ESIBaseTestClass):
         if node['provision_state'] != 'manageable':
             utils.node_set_provision_state(self.clients['admin'],
                                            self.node, 'manage')
-        self.addCleanup(utils.node_set_provision_state,
-                        self.clients['admin'],
-                        self.node, 'undeploy')
 
         network = utils.network_create(self.clients['admin'])
         self.addCleanup(utils.network_delete,
@@ -121,9 +118,6 @@ class NodeNetworkTests(base.ESIBaseTestClass):
         if node['provision_state'] != 'manageable':
             utils.node_set_provision_state(self.clients['project1-member'],
                                            self.node, 'manage')
-        self.addCleanup(utils.node_set_provision_state,
-                        self.clients['admin'],
-                        self.node, 'undeploy')
 
         network = utils.network_create(self.clients['project1-member'])
         self.addCleanup(utils.network_delete,
@@ -185,9 +179,6 @@ class NodeNetworkTests(base.ESIBaseTestClass):
         if node['provision_state'] != 'manageable':
             utils.node_set_provision_state(self.clients['project1-member'],
                                            self.node, 'manage')
-        self.addCleanup(utils.node_set_provision_state,
-                        self.clients['admin'],
-                        self.node, 'undeploy')
 
         network = utils.network_create(self.clients['project1-member'])
         self.addCleanup(utils.network_delete,
@@ -256,9 +247,7 @@ class NodeNetworkTests(base.ESIBaseTestClass):
         if node['provision_state'] != 'manageable':
             utils.node_set_provision_state(self.clients['admin'],
                                            self.node, 'manage')
-        self.addCleanup(utils.node_set_provision_state,
-                        self.clients['admin'],
-                        self.node, 'undeploy')
+
         utils.esi_node_network_attach(self.clients['admin'],
                                       self.node, port['name'])
         self.addCleanup(utils.esi_node_network_detach,
@@ -313,11 +302,9 @@ class NodeNetworkTests(base.ESIBaseTestClass):
                         port['name'])
 
         node = utils.node_show(self.clients['project1-member'], self.node)
-        utils.node_set_provision_state(self.clients['project1-member'],
-                                       self.node, 'manage')
-        self.addCleanup(utils.node_set_provision_state,
-                        self.clients['admin'],
-                        self.node, 'undeploy')
+        if node['provision_state'] != 'manageable':
+            utils.node_set_provision_state(self.clients['project1-member'],
+                                           self.node, 'manage')
 
         self.assertRaises(exceptions.CommandFailed,
                           utils.esi_node_network_attach,
