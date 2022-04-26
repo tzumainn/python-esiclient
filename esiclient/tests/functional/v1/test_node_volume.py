@@ -95,7 +95,7 @@ class NodeVolumeAttachTests(base.ESIBaseTestClass):
 
         node = utils.node_show(self.clients['project1-member'], self.node)
         if node['provision_state'] != 'available':
-            utils.node_set_provision_state(self.clients['project1'],
+            utils.node_set_provision_state(self.clients['project1-member'],
                                            node['name'], 'provide')
 
         utils.esi_node_volume_attach(
@@ -150,7 +150,7 @@ class NodeVolumeAttachTests(base.ESIBaseTestClass):
 
         node = utils.node_show(self.clients['project1-member'], self.node)
         if node['provision_state'] != 'available':
-            utils.node_set_provision_state(self.clients['project1'],
+            utils.node_set_provision_state(self.clients['project1-member'],
                                            node['name'], 'provide')
 
         utils.esi_node_volume_attach(
@@ -230,7 +230,7 @@ class NodeVolumeAttachTests(base.ESIBaseTestClass):
 
         node = utils.node_show(self.clients['project1-member'], self.node)
         if node['provision_state'] != 'available':
-            utils.node_set_provision_state(self.clients['project1'],
+            utils.node_set_provision_state(self.clients['project1-member'],
                                            node['name'], 'provide')
         volume = utils.volume_create(self.clients['project2-member'])
         self.addCleanup(utils.volume_delete,
@@ -277,7 +277,7 @@ class NodeVolumeAttachTests(base.ESIBaseTestClass):
 
         node = utils.node_show(self.clients['project1-member'], self.node)
         if node['provision_state'] != 'available':
-            utils.node_set_provision_state(self.clients['project1'],
+            utils.node_set_provision_state(self.clients['project1-member'],
                                            node['name'], 'provide')
         volume = utils.volume_create(self.clients['project2-member'])
         self.addCleanup(utils.volume_delete,
