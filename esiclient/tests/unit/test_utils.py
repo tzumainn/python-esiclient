@@ -185,7 +185,8 @@ class TestGetPortName(TestCase):
         self.assertEqual('esi-test_network-bar', name)
 
     def test_get_port_name_prefix_and_suffix(self):
-        name = utils.get_port_name(self.network.name, prefix='foo', suffix='bar')
+        name = utils.get_port_name(self.network.name, prefix='foo',
+                                   suffix='bar')
         self.assertEqual('esi-foo-test_network-bar', name)
 
 
