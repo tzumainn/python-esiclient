@@ -11,4 +11,4 @@
 
 # REQUIRED FOR: test_node_volume
 #storage_network_ident = <name or uuid of storage network>
-#volume_ident = <name or uuid of volume accessible by admin>
+#test_volume_ident = <name or uuid of volume accessible by admin>
