@@ -104,9 +104,14 @@ def esi_trunk_remove_network(client, trunk_ident, tagged_network_ident,
 
 def esi_node_volume_attach(client, port_ident, node_ident, volume_ident,
                            fail_ok=False):
-    return client.esi('node volume attach',
-                      '--port %s' % port_ident, '{0} {1}'
-                      .format(node_ident, volume_ident), fail_ok)
+    client.esi('node volume attach',
+               '--port %s' % port_ident, '{0} {1}'
+               .format(node_ident, volume_ident), fail_ok)
+    # wait until target provision state is None
+    node = node_show(client, node_ident, fail_ok)
+    while node['target_provision_state'] is not None:
+        node = node_show(client, node_ident, fail_ok)
+        time.sleep(15)
 
 
 def image_create(client, image_path, name=None, visibility='public',
