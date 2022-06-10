@@ -15,6 +15,7 @@ import logging
 from osc_lib.command import command
 from osc_lib import exceptions
 from osc_lib.i18n import _
+from oslo_utils import uuidutils
 
 from esiclient import utils
 
@@ -48,29 +49,56 @@ class List(command.Lister):
 
         if parsed_args.node:
             ports = ironic_client.port.list(node=parsed_args.node, detail=True)
+            if uuidutils.is_uuid_like(parsed_args.node):
+                node_name = ironic_client.node.get(parsed_args.node).name
+            else:
+                node_name = parsed_args.node
         else:
             ports = ironic_client.port.list(detail=True)
+            nodes = ironic_client.node.list()
 
+        filter_network = None
         if parsed_args.network:
             filter_network = neutron_client.find_network(parsed_args.network)
+            neutron_ports = neutron_client.ports(network_id=filter_network.id)
+        else:
+            networks = neutron_client.networks()
+            neutron_ports = neutron_client.ports()
 
         data = []
+
         for port in ports:
-            node = ironic_client.node.get(port.node_uuid)
+            if not parsed_args.node:
+                node_name = next((node for node in nodes
+                                  if node.uuid == port.node_uuid), None).name
+
             neutron_port_id = port.internal_info.get('tenant_vif_port_id')
+
             if neutron_port_id:
-                neutron_port = neutron_client.get_port(neutron_port_id)
+                neutron_port = next((np for np in neutron_ports
+                                     if np.id == neutron_port_id), None)
+
                 network_id = neutron_port.network_id
-                if not parsed_args.network or filter_network.id == network_id:
-                    network_names, _, fixed_ips \
-                        = utils.get_full_network_info_from_port(
-                            neutron_port, neutron_client)
-                    data.append([node.name, port.address,
+
+                if filter_network:
+                    network_name = utils.get_network_display_name(
+                        filter_network)
+                else:
+                    network = next((network for network in networks
+                                    if network.id == network_id), None)
+                    network_name = utils.get_network_display_name(network)
+
+                if not filter_network or filter_network.id == network_id:
+                    fixed_ip = ''
+                    if neutron_port.fixed_ips and \
+                            len(neutron_port.fixed_ips) > 0:
+                        fixed_ip = neutron_port.fixed_ips[0]['ip_address']
+                    data.append([node_name, port.address,
                                  neutron_port.name,
-                                 "\n".join(network_names),
-                                 "\n".join(fixed_ips)])
-            elif not parsed_args.network:
-                data.append([node.name, port.address, None, None, None])
+                                 network_name,
+                                 fixed_ip])
+            elif not filter_network:
+                data.append([node_name, port.address, None, None, None])
 
         return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], data
 
