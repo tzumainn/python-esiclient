@@ -28,28 +28,28 @@ class TestList(base.TestCommand):
 
         self.port1 = utils.create_mock_object({
             "uuid": "port_uuid_1",
-            "node_uuid": "node_uuid_1",
+            "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
             "address": "aa:aa:aa:aa:aa:aa",
             "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'}
         })
         self.port2 = utils.create_mock_object({
             "uuid": "port_uuid_2",
-            "node_uuid": "node_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "address": "bb:bb:bb:bb:bb:bb",
             "internal_info": {}
         })
         self.port3 = utils.create_mock_object({
             "uuid": "port_uuid_3",
-            "node_uuid": "node_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "address": "cc:cc:cc:cc:cc:cc",
             "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'}
         })
         self.node1 = utils.create_mock_object({
-            "uuid": "node_uuid_1",
+            "uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
             "name": "node1"
         })
         self.node2 = utils.create_mock_object({
-            "uuid": "node_uuid_2",
+            "uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "name": "node2"
         })
         self.network = utils.create_mock_object({
@@ -72,9 +72,9 @@ class TestList(base.TestCommand):
         })
 
         def mock_node_get(node_uuid):
-            if node_uuid == "node_uuid_1":
+            if node_uuid == "11111111-2222-3333-4444-aaaaaaaaaaaa":
                 return self.node1
-            elif node_uuid == "node_uuid_2":
+            elif node_uuid == "11111111-2222-3333-4444-bbbbbbbbbbbb":
                 return self.node2
             return None
         self.app.client_manager.baremetal.node.get.side_effect = mock_node_get
@@ -90,8 +90,12 @@ class TestList(base.TestCommand):
             side_effect = mock_neutron_port_get
         self.app.client_manager.network.find_network.\
             return_value = self.network
-        self.app.client_manager.network.get_network.\
-            return_value = self.network
+        self.app.client_manager.network.ports.\
+            return_value = [self.neutron_port1, self.neutron_port2]
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+        self.app.client_manager.baremetal.node.list.\
+            return_value = [self.node1, self.node2]
 
     def test_take_action(self):
         self.app.client_manager.baremetal.port.list.\
@@ -115,15 +119,11 @@ class TestList(base.TestCommand):
         self.app.client_manager.baremetal.port.list.\
             assert_called_once_with(detail=True)
 
-    @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["node2"],
-                              ["2.2.2.2"]),
-                autospec=True)
-    def test_take_action_node_filter(self, mock_gfnifp):
+    def test_take_action_node_filter(self):
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port2, self.port3]
 
-        arglist = ['--node', 'node2']
+        arglist = ['--node', '11111111-2222-3333-4444-bbbbbbbbbbbb']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
@@ -137,19 +137,10 @@ class TestList(base.TestCommand):
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
-            assert_called_once_with(node="node2", detail=True)
-        mock_gfnifp.assert_called_once
+            assert_called_once_with(
+                node="11111111-2222-3333-4444-bbbbbbbbbbbb", detail=True)
 
-    @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                autospec=True)
-    def test_take_action_network_filter(self, mock_gfnifp):
-        def mock_gfnifp_values(port, client):
-            if port.id == 'neutron_port_uuid_1':
-                return ['test_network'], ['node1'], ['1.1.1.1']
-            elif port.id == 'neutron_port_uuid_2':
-                return ['test_network'], ['node2'], ['2.2.2.2']
-            return None
-        mock_gfnifp.side_effect = mock_gfnifp_values
+    def test_take_action_network_filter(self):
 
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port1, self.port2, self.port3]
@@ -170,13 +161,8 @@ class TestList(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
             assert_called_once_with(detail=True)
-        self.assertEqual(mock_gfnifp.call_count, 2)
 
-    @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["node2"],
-                              ["2.2.2.2"]),
-                autospec=True)
-    def test_take_action_node_network_filter(self, mock_gfnifp):
+    def test_take_action_node_network_filter(self):
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port2, self.port3]
 
@@ -194,7 +180,6 @@ class TestList(base.TestCommand):
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
             assert_called_once_with(node="node2", detail=True)
-        mock_gfnifp.assert_called_once
 
 
 class TestAttach(base.TestCommand):
