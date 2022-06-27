@@ -2,6 +2,9 @@
 
 `python-esiclient` extends the OpenStack CLI to provide simplified user workflows, encapsulating multiple OpenStack CLI commands into a single CLI command.
 
+To install this package using PyPI,
+ - `pip install python-esiclient`
+
 ## `openstack esi node network <command>`
 
 These commands manage network connections to nodes.
