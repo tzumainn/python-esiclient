@@ -60,10 +60,11 @@ class List(command.Lister):
         filter_network = None
         if parsed_args.network:
             filter_network = neutron_client.find_network(parsed_args.network)
-            neutron_ports = neutron_client.ports(network_id=filter_network.id)
+            neutron_ports = list(neutron_client.ports(
+                network_id=filter_network.id))
         else:
-            networks = neutron_client.networks()
-            neutron_ports = neutron_client.ports()
+            networks = list(neutron_client.networks())
+            neutron_ports = list(neutron_client.ports())
 
         data = []
 
