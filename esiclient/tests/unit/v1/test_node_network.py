@@ -44,6 +44,12 @@ class TestList(base.TestCommand):
             "address": "cc:cc:cc:cc:cc:cc",
             "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'}
         })
+        self.port4 = utils.create_mock_object({
+            "uuid": "port_uuid_4",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "address": "dd:dd:dd:dd:dd:dd",
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_4'}
+        })
         self.node1 = utils.create_mock_object({
             "uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
             "name": "node1"
@@ -108,12 +114,28 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
+          ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+          [['node1', 'aa:aa:aa:aa:aa:aa', 'node1', 'test_network', '1.1.1.1'],
+           ['node2', 'bb:bb:bb:bb:bb:bb', None, None, None],
+           ['node2', 'cc:cc:cc:cc:cc:cc', 'node2', 'test_network', '2.2.2.2']]
+        )
+        self.assertEqual(expected, results)
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+
+    def test_take_action_neutron_port_does_not_exist(self):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port4]
+
+        arglist = []
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+        expected = (
             ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            [["node1", "aa:aa:aa:aa:aa:aa",
-              "node1", "test_network", "1.1.1.1"],
-             ["node2", "bb:bb:bb:bb:bb:bb", None, None, None],
-             ["node2", "cc:cc:cc:cc:cc:cc",
-              "node2", "test_network", "2.2.2.2"]]
+            [["node2", "dd:dd:dd:dd:dd:dd", None, None, None]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -130,10 +152,9 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            [["node2", "bb:bb:bb:bb:bb:bb", None, None, None],
-             ["node2", "cc:cc:cc:cc:cc:cc",
-              "node2", "test_network", "2.2.2.2"]]
+           ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+           [['node2', 'bb:bb:bb:bb:bb:bb', None, None, None],
+            ['node2', 'cc:cc:cc:cc:cc:cc', 'node2', 'test_network', '2.2.2.2']]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\

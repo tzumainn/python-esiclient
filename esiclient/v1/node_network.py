@@ -74,30 +74,31 @@ class List(command.Lister):
                                   if node.uuid == port.node_uuid), None).name
 
             neutron_port_id = port.internal_info.get('tenant_vif_port_id')
+            neutron_port = None
 
             if neutron_port_id:
                 neutron_port = next((np for np in neutron_ports
                                      if np.id == neutron_port_id), None)
 
+            if neutron_port is not None:
                 network_id = neutron_port.network_id
 
-                if filter_network:
-                    network_name = utils.get_network_display_name(
-                        filter_network)
-                else:
-                    network = next((network for network in networks
-                                    if network.id == network_id), None)
-                    network_name = utils.get_network_display_name(network)
-
                 if not filter_network or filter_network.id == network_id:
+                    if filter_network:
+                        network = filter_network
+                    else:
+                        network = next((network for network in networks
+                                        if network.id == network_id), None)
+
+                    network_name = utils.get_network_display_name(network)
                     fixed_ip = ''
                     if neutron_port.fixed_ips and \
                             len(neutron_port.fixed_ips) > 0:
                         fixed_ip = neutron_port.fixed_ips[0]['ip_address']
-                    data.append([node_name, port.address,
-                                 neutron_port.name,
-                                 network_name,
-                                 fixed_ip])
+                        data.append([node_name, port.address,
+                                    neutron_port.name,
+                                    network_name,
+                                    fixed_ip])
             elif not filter_network:
                 data.append([node_name, port.address, None, None, None])
 
