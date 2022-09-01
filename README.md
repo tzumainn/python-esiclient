@@ -136,3 +136,45 @@ openstack esi node volume attach
 - `--port <port>`:  Neutron port (name or UUID)
 - `node`: Node (name or UUID)
 - `volume`: Volume (name or UUID)
+
+## `openstack esi switch <command>`
+
+These commands allow you to treat ESI as a switch.
+
+### `openstack esi switch vlan list`
+
+List VLANs and associated switch ports on a switch.
+
+```
+openstack esi switch vlan list <switch>
+```
+
+- `switch`: Switch
+
+### `openstack esi switch port enable access`
+
+Attach VLAN to a switchport on a switch.
+
+```
+openstack esi switch port enable access
+   <switch>
+   <switchport>
+   <vlan>
+```
+
+- `switch`: Switch
+- `switchport`: Switchport
+- `vlan`: VLAN
+
+### `openstack esi switch port disable access`
+
+Disable VLAN access to a switchport on a switch.
+
+```
+openstack esi switch port disable access
+   <switch>
+   <switchport>   
+```
+
+- `switch`: Switch
+- `switchport`: Switchport
