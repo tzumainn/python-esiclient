@@ -258,6 +258,10 @@ class TestAttach(base.TestCommand):
             "fixed_ips": [{"ip_address": "2.2.2.2"}],
             "trunk_details": None
         })
+        self.trunk = utils.create_mock_object({
+            "port_id": self.neutron_port.id,
+            "name": "test_trunk"
+        })
 
         self.app.client_manager.network.find_network.\
             return_value = self.network
@@ -271,9 +275,11 @@ class TestAttach(base.TestCommand):
             return_value = self.neutron_port
         self.app.client_manager.network.ports.\
             return_value = []
+        self.app.client_manager.network.find_trunk.\
+            return_value = self.trunk
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["node2"],
+                return_value=(["test_network"], ["node1-port"],
                               ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_network(self, mock_gfnifp):
@@ -303,7 +309,7 @@ class TestAttach(base.TestCommand):
         mock_gfnifp.assert_called_once
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["node2"],
+                return_value=(["test_network"], ["node1-port"],
                               ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_port(self, mock_gfnifp):
@@ -331,7 +337,7 @@ class TestAttach(base.TestCommand):
         mock_gfnifp.assert_called_once
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
-                return_value=(["test_network"], ["node2"],
+                return_value=(["test_network"], ["node1-port"],
                               ["2.2.2.2"]),
                 autospec=True)
     def test_take_action_port_and_mac_address(self, mock_gfnifp):
@@ -362,18 +368,65 @@ class TestAttach(base.TestCommand):
                                     port_uuid='port_uuid_2')
         mock_gfnifp.assert_called_once
 
-    def test_take_action_port_and_network_exception(self):
-        arglist = ['node1', '--network', 'test_network', '--port', 'node1']
+    @mock.patch('esiclient.utils.get_full_network_info_from_port',
+                return_value=(["test_network"], ["node1-port"],
+                              ["2.2.2.2"]),
+                autospec=True)
+    def test_take_action_trunk(self, mock_gfnifp):
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+
+        arglist = ['node1', '--trunk', 'test_trunk']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
 
+        results = self.cmd.take_action(parsed_args)
+        expected = (
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["node1", "bb:bb:bb:bb:bb:bb", "node1-port",
+             "test_network", "2.2.2.2"]
+        )
+        self.assertEqual(expected, results)
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with("test_trunk")
+        self.app.client_manager.baremetal.node.vif_attach.\
+            assert_called_once_with('node1', self.neutron_port.id)
+        mock_gfnifp.assert_called_once
+
+    def test_take_action_port_network_and_trunk_exception(self):
+        arglist1 = ['node1', '--network', 'test_network', '--port', 'node1']
+        arglist2 = ['node1', '--network', 'test_network', '--trunk', 'trunk']
+        arglist3 = ['node1', '--port', 'node1', '--trunk', 'trunk']
+        arglist4 = ['node1', '--network', 'test_network', '--port', 'node1',
+                    '--trunk', 'trunk']
+        verifylist = []
+
+        parsed_args1 = self.check_parser(self.cmd, arglist1, verifylist)
+        parsed_args2 = self.check_parser(self.cmd, arglist2, verifylist)
+        parsed_args3 = self.check_parser(self.cmd, arglist3, verifylist)
+        parsed_args4 = self.check_parser(self.cmd, arglist4, verifylist)
+
         self.assertRaisesRegex(
             exceptions.CommandError,
-            'ERROR: Specify only one of network or port',
-            self.cmd.take_action, parsed_args)
+            'ERROR: Specify only one of network, port or trunk',
+            self.cmd.take_action, parsed_args1)
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Specify only one of network, port or trunk',
+            self.cmd.take_action, parsed_args2)
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Specify only one of network, port or trunk',
+            self.cmd.take_action, parsed_args3)
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Specify only one of network, port or trunk',
+            self.cmd.take_action, parsed_args4)
 
-    def test_take_action_no_port_or_network_exception(self):
+    def test_take_action_no_port_or_network_or_trunk_exception(self):
         arglist = ['node1']
         verifylist = []
 
@@ -381,7 +434,7 @@ class TestAttach(base.TestCommand):
 
         self.assertRaisesRegex(
             exceptions.CommandError,
-            'ERROR: You must specify either network or port',
+            'ERROR: You must specify either network, port, or trunk',
             self.cmd.take_action, parsed_args)
 
     def test_take_action_port_free_exception(self):

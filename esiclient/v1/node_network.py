@@ -127,6 +127,12 @@ class Attach(command.ShowOne):
             help=_("Attach to this neutron port (name or UUID).")
         )
         parser.add_argument(
+            '--trunk',
+            dest='trunk',
+            metavar='<trunk>',
+            help=_("Attach to this trunk's (name or UUID) parent port.")
+        )
+        parser.add_argument(
             '--mac-address',
             dest='mac_address',
             metavar='<mac address>',
@@ -139,12 +145,15 @@ class Attach(command.ShowOne):
         self.log.debug("take_action(%s)", parsed_args)
 
         node_uuid = parsed_args.node
-        if parsed_args.network and parsed_args.port:
+        if (parsed_args.network and parsed_args.port) \
+           or (parsed_args.network and parsed_args.trunk) \
+           or (parsed_args.port and parsed_args.trunk):
             raise exceptions.CommandError(
-                "ERROR: Specify only one of network or port")
-        if not parsed_args.network and not parsed_args.port:
+                "ERROR: Specify only one of network, port or trunk")
+        if not parsed_args.network and not parsed_args.port \
+           and not parsed_args.trunk:
             raise exceptions.CommandError(
-                "ERROR: You must specify either network or port")
+                "ERROR: You must specify either network, port, or trunk")
 
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
@@ -154,6 +163,15 @@ class Attach(command.ShowOne):
             port = None
         elif parsed_args.port:
             port = neutron_client.find_port(parsed_args.port)
+            if port is None:
+                raise exceptions.CommandError(
+                    "ERROR: This is not a port name or UUID")
+        elif parsed_args.trunk:
+            trunk = neutron_client.find_trunk(parsed_args.trunk)
+            port = None
+            if trunk is None:
+                raise exceptions.CommandError(
+                    "ERROR: no trunk named {0}".format(parsed_args.name))
 
         node = ironic_client.node.get(node_uuid)
 
@@ -181,20 +199,26 @@ class Attach(command.ShowOne):
             print("Attaching port {1} to node {0}{2}".format(
                 node.name, port.name, mac_string))
             ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
-        else:
+        elif parsed_args.network:
             print("Attaching network {1} to node {0}{2}".format(
                 node.name, network.name, mac_string))
             port_name = utils.get_port_name(network.name, prefix=node.name)
             port = utils.get_or_create_port(port_name, network, neutron_client)
             ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
             port = neutron_client.get_port(port.id)
+        elif parsed_args.trunk:
+            print("Attaching trunk {1} to node {0}{2}".format(
+                node.name, trunk.name, mac_string))
+            port = neutron_client.get_port(trunk.port_id)
+            ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
 
-        network_names, _, fixed_ips \
+        network_names, port_names, fixed_ips \
             = utils.get_full_network_info_from_port(
                 port, neutron_client)
 
         return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], \
-            [node.name, port.mac_address, port.name,
+            [node.name, port.mac_address,
+             "\n".join(port_names),
              "\n".join(network_names),
              "\n".join(fixed_ips)]
 

@@ -8,7 +8,7 @@ To install as a package:
 To install from source:
  - clone this repository
  - install all requirements: `pip install -r requirements.txt`
- - install: `python setup.py install` 
+ - install: `python setup.py install`
 
 ## `openstack esi node network <command>`
 
@@ -33,13 +33,14 @@ Attach network to a node.
 
 ```
 openstack esi node network attach
-   (--network <network> | --port <port>)
+   (--network <network> | --port <port> | --trunk <trunk>)
    [--mac-address <mac-address>]
    <node>
 ```
 
 - `--network <network>`:  Network (name or UUID)
 - `--port <port>`:  Neutron port (name or UUID)
+- `--trunk <trunk>`:  Neutron trunk (name or UUID)
 - `--mac-address <mac-address>`:  Node MAC address to attach the network to.
 - `node`: Node (name or UUID)
 
