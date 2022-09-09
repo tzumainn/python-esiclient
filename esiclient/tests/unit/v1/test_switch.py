@@ -393,3 +393,803 @@ class TestDisableAccessPort(base.TestCommand):
             assert_called_once_with(detail=True)
         self.app.client_manager.baremetal.node.vif_detach.\
             assert_not_called
+
+
+class TestEnableTrunkPort(base.TestCommand):
+
+    def setUp(self):
+        super(TestEnableTrunkPort, self).setUp()
+        self.cmd = switch.EnableTrunkPort(self.app, None)
+
+        self.node = utils.create_mock_object({
+            "uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "name": "node1",
+        })
+        self.port1 = utils.create_mock_object({
+            "uuid": "port_uuid_1",
+            "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/1'},
+        })
+        self.port2 = utils.create_mock_object({
+            "uuid": "port_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/2'},
+        })
+        self.network = utils.create_mock_object({
+            "id": "network_uuid",
+            "name": "test_network",
+            "network_type": "vlan",
+            "provider_segmentation_id": "100",
+            "subnet_ids": ["subnet_uuid"]
+        })
+        self.neutron_port = utils.create_mock_object({
+            "id": "neutron_port_uuid",
+            "network_id": "network_uuid",
+            "name": "node1-port",
+            "mac_address": "bb:bb:bb:bb:bb:bb",
+            "fixed_ips": [{"ip_address": "2.2.2.2"}],
+            "trunk_details": None
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "neutron_port_uuid",
+        })
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+        self.app.client_manager.network.create_trunk.\
+            return_value = self.trunk
+        mock_gpn.return_value = 'node1-port-trunk-port'
+        mock_gocp.return_value = self.neutron_port
+
+        arglist = ['switch1', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.baremetal.node.get.\
+            assert_called_once_with(
+                "11111111-2222-3333-4444-aaaaaaaaaaaa")
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='100')
+        mock_gpn.assert_called_once_with('test_network',
+                                         prefix='switch1-Ethernet1/1',
+                                         suffix='trunk-port')
+        mock_gocp.assert_called_once_with(
+            'node1-port-trunk-port', self.network,
+            self.app.client_manager.network)
+        self.app.client_manager.network.create_trunk.\
+            assert_called_once_with(
+                name='switch1-Ethernet1/1',
+                port_id='neutron_port_uuid')
+        self.app.client_manager.baremetal.node.vif_attach.\
+            assert_called_once_with(
+                "11111111-2222-3333-4444-aaaaaaaaaaaa",
+                'neutron_port_uuid')
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_vlan(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = []
+
+        arglist = ['switch1', 'Ethernet1/1', '200']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: VLAN ID unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='200')
+        mock_gpn.assert_not_called
+        mock_gocp.assert_not_called
+        self.app.client_manager.network.create_trunk.assert_not_called
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_switchport(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+
+        arglist = ['switch1', 'Ethernet1/3', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        mock_gocp.assert_not_called
+        self.app.client_manager.network.create_trunk.assert_not_called
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_switch(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+
+        arglist = ['switch2', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        mock_gocp.assert_not_called
+        self.app.client_manager.network.create_trunk.assert_not_called
+
+
+class TestDisableTrunkPort(base.TestCommand):
+
+    def setUp(self):
+        super(TestDisableTrunkPort, self).setUp()
+        self.cmd = switch.DisableTrunkPort(self.app, None)
+
+        self.port1 = utils.create_mock_object({
+            "uuid": "port_uuid_1",
+            "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/1'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'}
+        })
+        self.port2 = utils.create_mock_object({
+            "uuid": "port_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/2'},
+            "internal_info": {}
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "neutron_port_uuid_1",
+            "sub_ports": [
+                {
+                    "port_id": 'neutron_port_uuid_2',
+                    "segmentation_id": '222',
+                    "segmentation_type": 'vlan'
+                },
+                {
+                    "port_id": 'neutron_port_uuid_3',
+                    "segmentation_id": '333',
+                    "segmentation_type": 'vlan'
+                }
+            ]
+        })
+
+    def test_take_action(self):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.find_trunk.\
+            return_value = self.trunk
+
+        arglist = ['switch1', 'Ethernet1/1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('switch1-Ethernet1/1')
+        self.app.client_manager.baremetal.node.vif_detach.\
+            assert_called_once_with(
+                '11111111-2222-3333-4444-aaaaaaaaaaaa',
+                'neutron_port_uuid_1')
+        self.app.client_manager.network.delete_trunk.\
+            assert_called_once_with('trunk_uuid')
+        self.assertEqual(
+            self.app.client_manager.network.delete_port.call_count, 3)
+
+    def test_take_action_unknown_switchport(self):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+
+        arglist = ['switch1', 'Ethernet1/3']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        self.app.client_manager.baremetal.node.vif_detach.\
+            assert_not_called
+        self.app.client_manager.network.delete_trunk.\
+            assert_not_called
+        self.app.client_manager.network.delete_port.\
+            assert_not_called
+
+    def test_take_action_unknown_switch(self):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+
+        arglist = ['switch2', 'Ethernet1/1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        self.app.client_manager.baremetal.node.vif_detach.\
+            assert_not_called
+        self.app.client_manager.network.delete_trunk.\
+            assert_not_called
+        self.app.client_manager.network.delete_port.\
+            assert_not_called
+
+    def test_take_action_no_trunk(self):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.find_trunk.\
+            return_value = None
+
+        arglist = ['switch1', 'Ethernet1/1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            "ERROR: no trunk named switch1-Ethernet1/1",
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('switch1-Ethernet1/1')
+        self.app.client_manager.baremetal.node.vif_detach.\
+            assert_not_called
+        self.app.client_manager.network.delete_trunk.\
+            assert_not_called
+        self.app.client_manager.network.delete_port.\
+            assert_not_called
+
+
+class TestAddTrunkVLAN(base.TestCommand):
+
+    def setUp(self):
+        super(TestAddTrunkVLAN, self).setUp()
+        self.cmd = switch.AddTrunkVLAN(self.app, None)
+
+        self.node = utils.create_mock_object({
+            "uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "name": "node1",
+        })
+        self.port1 = utils.create_mock_object({
+            "uuid": "port_uuid_1",
+            "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/1'},
+        })
+        self.port2 = utils.create_mock_object({
+            "uuid": "port_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/2'},
+        })
+        self.network = utils.create_mock_object({
+            "id": "network_uuid",
+            "name": "test_network",
+            "network_type": "vlan",
+            "provider_segmentation_id": "100",
+            "subnet_ids": ["subnet_uuid"]
+        })
+        self.neutron_port = utils.create_mock_object({
+            "id": "neutron_port_uuid",
+            "network_id": "network_uuid",
+            "name": "node1-port",
+            "mac_address": "bb:bb:bb:bb:bb:bb",
+            "fixed_ips": [{"ip_address": "2.2.2.2"}],
+            "trunk_details": None
+        })
+        self.neutron_subport = utils.create_mock_object({
+            "id": "neutron_subport_uuid",
+            "network_id": "network_uuid",
+            "name": "node1-sub-port",
+            "mac_address": "cc:cc:cc:cc:cc:cc",
+            "fixed_ips": [{"ip_address": "3.3.3.3"}],
+            "trunk_details": None
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "neutron_port_uuid",
+        })
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+        self.app.client_manager.network.find_trunk.\
+            return_value = self.trunk
+        mock_gpn.return_value = 'node1-port-trunk-port-sub-port'
+        mock_gocp.return_value = self.neutron_subport
+
+        arglist = ['switch1', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.baremetal.node.get.\
+            assert_called_once_with(
+                "11111111-2222-3333-4444-aaaaaaaaaaaa")
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='100')
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('switch1-Ethernet1/1')
+        mock_gpn.assert_called_once_with('test_network',
+                                         prefix='switch1-Ethernet1/1',
+                                         suffix='sub-port')
+        mock_gocp.assert_called_once_with(
+            'node1-port-trunk-port-sub-port', self.network,
+            self.app.client_manager.network)
+        self.app.client_manager.network.add_trunk_subports.\
+            assert_called_once_with(
+                'trunk_uuid',
+                [
+                    {
+                        'port_id': 'neutron_subport_uuid',
+                        'segmentation_type': 'vlan',
+                        'segmentation_id': '100'
+                    }
+                ]
+            )
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_vlan(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = []
+
+        arglist = ['switch1', 'Ethernet1/1', '200']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: VLAN ID unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='200')
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        mock_gocp.assert_not_called
+        self.app.client_manager.network.add_trunk_subports.\
+            assert_not_called
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_switchport(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+
+        arglist = ['switch1', 'Ethernet1/3', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_not_called
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        mock_gocp.assert_not_called
+        self.app.client_manager.network.add_trunk_subports.\
+            assert_not_called
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_switch(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+
+        arglist = ['switch2', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_not_called
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        mock_gocp.assert_not_called
+        self.app.client_manager.network.add_trunk_subports.\
+            assert_not_called
+
+    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_no_trunk(self, mock_gpn, mock_gocp):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+        self.app.client_manager.network.find_trunk.\
+            return_value = None
+
+        arglist = ['switch1', 'Ethernet1/1', '200']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no trunk named switch1-Ethernet1/1',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='200')
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('switch1-Ethernet1/1')
+        mock_gpn.assert_not_called
+        mock_gocp.assert_not_called
+        self.app.client_manager.network.add_trunk_subports.\
+            assert_not_called
+
+
+class TestRemoveTrunkVLAN(base.TestCommand):
+
+    def setUp(self):
+        super(TestRemoveTrunkVLAN, self).setUp()
+        self.cmd = switch.RemoveTrunkVLAN(self.app, None)
+
+        self.node = utils.create_mock_object({
+            "uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "name": "node1",
+        })
+        self.port1 = utils.create_mock_object({
+            "uuid": "port_uuid_1",
+            "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/1'},
+        })
+        self.port2 = utils.create_mock_object({
+            "uuid": "port_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/2'},
+        })
+        self.network = utils.create_mock_object({
+            "id": "network_uuid",
+            "name": "test_network",
+            "network_type": "vlan",
+            "provider_segmentation_id": "100",
+            "subnet_ids": ["subnet_uuid"]
+        })
+        self.neutron_port = utils.create_mock_object({
+            "id": "neutron_port_uuid",
+            "network_id": "network_uuid",
+            "name": "node1-port",
+            "mac_address": "bb:bb:bb:bb:bb:bb",
+            "fixed_ips": [{"ip_address": "2.2.2.2"}],
+            "trunk_details": None
+        })
+        self.neutron_subport = utils.create_mock_object({
+            "id": "neutron_subport_uuid",
+            "network_id": "network_uuid",
+            "name": "node1-sub-port",
+            "mac_address": "cc:cc:cc:cc:cc:cc",
+            "fixed_ips": [{"ip_address": "3.3.3.3"}],
+            "trunk_details": None
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "neutron_port_uuid",
+        })
+
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action(self, mock_gpn):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+        self.app.client_manager.network.find_trunk.\
+            return_value = self.trunk
+        self.app.client_manager.network.find_port.\
+            return_value = self.neutron_subport
+        mock_gpn.return_value = 'node1-port-trunk-port-sub-port'
+
+        arglist = ['switch1', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.baremetal.node.get.\
+            assert_called_once_with(
+                "11111111-2222-3333-4444-aaaaaaaaaaaa")
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='100')
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('switch1-Ethernet1/1')
+        mock_gpn.assert_called_once_with('test_network',
+                                         prefix='switch1-Ethernet1/1',
+                                         suffix='sub-port')
+        self.app.client_manager.network.find_port.\
+            assert_called_once_with('node1-port-trunk-port-sub-port')
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_called_once_with(
+                'trunk_uuid',
+                [
+                    {
+                        'port_id': 'neutron_subport_uuid',
+                    }
+                ]
+            )
+
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_vlan(self, mock_gpn):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = []
+
+        arglist = ['switch1', 'Ethernet1/1', '200']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: VLAN ID unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='200')
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        self.app.client_manager.network.find_port.\
+            assert_not_called
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_not_called
+
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_switchport(self, mock_gpn):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+
+        arglist = ['switch1', 'Ethernet1/3', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_not_called
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        self.app.client_manager.network.find_port.\
+            assert_not_called
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_not_called
+
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_unknown_switch(self, mock_gpn):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+
+        arglist = ['switch2', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Switchport unknown',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_not_called
+        self.app.client_manager.network.find_trunk.\
+            assert_not_called
+        mock_gpn.assert_not_called
+        self.app.client_manager.network.find_port.\
+            assert_not_called
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_not_called
+
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_no_trunk(self, mock_gpn):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+        self.app.client_manager.network.find_trunk.\
+            return_value = None
+
+        arglist = ['switch1', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: no trunk named switch1-Ethernet1/1',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='100')
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('switch1-Ethernet1/1')
+        mock_gpn.assert_not_called
+        self.app.client_manager.network.find_port.\
+            assert_not_called
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_not_called
+
+    @mock.patch('esiclient.utils.get_port_name', autospec=True)
+    def test_take_action_no_trunk_port(self, mock_gpn):
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.network.networks.\
+            return_value = [self.network]
+        self.app.client_manager.network.find_trunk.\
+            return_value = self.trunk
+        self.app.client_manager.network.find_port.\
+            return_value = None
+        mock_gpn.return_value = 'node1-port-trunk-port-sub-port'
+
+        arglist = ['switch1', 'Ethernet1/1', '100']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: trunk is not attached to test_network',
+            self.cmd.take_action, parsed_args)
+
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.networks.\
+            assert_called_once_with(
+                provider_network_type='vlan',
+                provider_segmentation_id='100')
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('switch1-Ethernet1/1')
+        mock_gpn.assert_called_once_with('test_network',
+                                         prefix='switch1-Ethernet1/1',
+                                         suffix='sub-port')
+        self.app.client_manager.network.find_port.\
+            assert_called_once_with('node1-port-trunk-port-sub-port')
+        self.app.client_manager.network.delete_trunk_subports.\
+            assert_not_called

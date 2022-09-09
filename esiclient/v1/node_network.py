@@ -63,7 +63,6 @@ class List(command.Lister):
             neutron_ports = list(neutron_client.ports(
                 network_id=filter_network.id))
         else:
-            networks = list(neutron_client.networks())
             neutron_ports = list(neutron_client.ports())
 
         data = []
@@ -84,21 +83,13 @@ class List(command.Lister):
                 network_id = neutron_port.network_id
 
                 if not filter_network or filter_network.id == network_id:
-                    if filter_network:
-                        network = filter_network
-                    else:
-                        network = next((network for network in networks
-                                        if network.id == network_id), None)
-
-                    network_name = utils.get_network_display_name(network)
-                    fixed_ip = ''
-                    if neutron_port.fixed_ips and \
-                            len(neutron_port.fixed_ips) > 0:
-                        fixed_ip = neutron_port.fixed_ips[0]['ip_address']
+                    network_names, _, fixed_ips \
+                        = utils.get_full_network_info_from_port(
+                            neutron_port, neutron_client)
                     data.append([node_name, port.address,
                                  neutron_port.name,
-                                 network_name,
-                                 fixed_ip])
+                                 "\n".join(network_names),
+                                 "\n".join(fixed_ips)])
             elif not filter_network:
                 data.append([node_name, port.address, None, None, None])
 
