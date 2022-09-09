@@ -95,10 +95,10 @@ class List(command.Lister):
                     if neutron_port.fixed_ips and \
                             len(neutron_port.fixed_ips) > 0:
                         fixed_ip = neutron_port.fixed_ips[0]['ip_address']
-                        data.append([node_name, port.address,
-                                    neutron_port.name,
-                                    network_name,
-                                    fixed_ip])
+                    data.append([node_name, port.address,
+                                 neutron_port.name,
+                                 network_name,
+                                 fixed_ip])
             elif not filter_network:
                 data.append([node_name, port.address, None, None, None])
 
