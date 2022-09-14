@@ -96,6 +96,8 @@ class TestList(base.TestCommand):
             side_effect = mock_neutron_port_get
         self.app.client_manager.network.find_network.\
             return_value = self.network
+        self.app.client_manager.network.get_network.\
+            return_value = self.network
         self.app.client_manager.network.ports.\
             return_value = [self.neutron_port1, self.neutron_port2]
         self.app.client_manager.network.networks.\

@@ -90,3 +90,24 @@ def get_or_create_port(port_name, network, client):
             device_owner='baremetal:none'
         )
     return port
+
+
+def get_switch_trunk_name(switch, switchport):
+    return switch + "-" + switchport
+
+
+def get_baremetal_port_from_switchport(switch, switchport, ironic_client):
+    ports = ironic_client.port.list(detail=True)
+    return next((port for port in ports
+                 if port.local_link_connection.get(
+                         'port_id') == switchport and
+                 port.local_link_connection.get(
+                     'switch_info') == switch),
+                None)
+
+
+def get_network_from_vlan(vlan_id, neutron_client):
+    networks = list(neutron_client.networks(
+        provider_network_type='vlan',
+        provider_segmentation_id=vlan_id))
+    return next(iter(networks), None)
