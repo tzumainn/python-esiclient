@@ -151,6 +151,16 @@ openstack esi switch vlan list <switch>
 
 - `switch`: Switch
 
+### `openstack esi switch port list`
+
+List switch ports and associated VLANs on a switch.
+
+```
+openstack esi switch port list <switch>
+```
+
+- `switch`: Switch
+
 ### `openstack esi switch port enable access`
 
 Attach VLAN to a switchport on a switch.
@@ -178,3 +188,61 @@ openstack esi switch port disable access
 
 - `switch`: Switch
 - `switchport`: Switchport
+
+### `openstack esi switch port enable trunk`
+
+Attach VLAN to a switchport as the native VLAN of a trunk on a switch.
+
+```
+openstack esi switch port enable trunk
+   <switch>
+   <switchport>
+   <vlan>
+```
+
+- `switch`: Switch
+- `switchport`: Switchport
+- `vlan`: VLAN
+
+### `openstack esi switch port disable trunk`
+
+Disable trunk on a switchport on a switch.
+
+```
+openstack esi switch port disable trunk
+   <switch>
+   <switchport>
+```
+
+- `switch`: Switch
+- `switchport`: Switchport
+
+### `openstack esi switch trunk add vlan`
+
+Add VLAN to a trunk on a switchport.
+
+```
+openstack esi switch trunk add vlan
+   <switch>
+   <switchport>
+   <vlan>
+```
+
+- `switch`: Switch
+- `switchport`: Switchport
+- `vlan`: VLAN
+
+### `openstack esi switch trunk remove vlan`
+
+Remove VLAN from a trunk on a switchport.
+
+```
+openstack esi switch trunk remove vlan
+   <switch>
+   <switchport>
+   <vlan>
+```
+
+- `switch`: Switch
+- `switchport`: Switchport
+- `vlan`: VLAN

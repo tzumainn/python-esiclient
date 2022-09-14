@@ -46,6 +46,14 @@ class ListVLAN(command.Lister):
         networks = list(neutron_client.networks(provider_network_type='vlan'))
         neutron_ports = list(neutron_client.ports())
 
+        # create neutron port mapping for subports
+        subnp_np_map = {}
+        for np in neutron_ports:
+            if np.trunk_details:
+                sub_nps = np.trunk_details['sub_ports']
+                for sub_np in sub_nps:
+                    subnp_np_map[sub_np['port_id']] = np.id
+
         data = []
         for network in networks:
             switch_ports = []
@@ -55,9 +63,13 @@ class ListVLAN(command.Lister):
                        if next(iter(np.fixed_ips), None).get(
                                'subnet_id', None) == subnet_id)
                 for np in nps:
+                    # if this is a subport, get the parent port
+                    # as that has the mapping to the switchport
+                    search_np_id = subnp_np_map.get(np.id, np.id)
                     port = next((port for port in ports
                                  if port.internal_info.get(
-                                         'tenant_vif_port_id', None) == np.id),
+                                         'tenant_vif_port_id',
+                                         None) == search_np_id),
                                 None)
                     if port:
                         switch_ports.append(
@@ -66,6 +78,47 @@ class ListVLAN(command.Lister):
                          switch_ports])
 
         return ["VLAN", "Ports"], data
+
+
+class ListSwitchPort(command.Lister):
+    """List Switch Ports"""
+
+    log = logging.getLogger(__name__ + ".ListSwitchPort")
+
+    def get_parser(self, prog_name):
+        parser = super(ListSwitchPort, self).get_parser(prog_name)
+        parser.add_argument(
+            "switch",
+            metavar="<switch>",
+            help=_("Switch"))
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+
+        switch = parsed_args.switch
+
+        ironic_client = self.app.client_manager.baremetal
+        neutron_client = self.app.client_manager.network
+
+        ports = list((port for port in ironic_client.port.list(detail=True)
+                      if port.local_link_connection.get(
+                              'switch_info') == switch and
+                      port.internal_info.get('tenant_vif_port_id')))
+        neutron_ports = list(neutron_client.ports())
+
+        data = []
+        for port in ports:
+            switchport = port.local_link_connection.get('port_id')
+            np_id = port.internal_info.get('tenant_vif_port_id')
+            np = next((np for np in neutron_ports if np.id == np_id), None)
+            if np:
+                network_names, _, _ = utils.get_full_network_info_from_port(
+                    np, neutron_client)
+                data.append([switchport, "\n".join(network_names)])
+            else:
+                data.append([switchport, ''])
+        return ["Port", "VLANs"], data
 
 
 class EnableAccessPort(command.ShowOne):

@@ -31,35 +31,35 @@ class TestListVLAN(base.TestCommand):
             "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
             "local_link_connection": {'switch_info': 'switch1',
                                       'port_id': 'Ethernet1/1'},
-            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'}
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'},
         })
         self.port2 = utils.create_mock_object({
             "uuid": "port_uuid_2",
             "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "local_link_connection": {'switch_info': 'switch1',
                                       'port_id': 'Ethernet1/2'},
-            "internal_info": {}
+            "internal_info": {},
         })
         self.port3 = utils.create_mock_object({
             "uuid": "port_uuid_3",
             "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "local_link_connection": {'switch_info': 'switch1',
                                       'port_id': 'Ethernet1/3'},
-            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'}
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'},
         })
         self.port4 = utils.create_mock_object({
             "uuid": "port_uuid_4",
             "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "local_link_connection": {'switch_info': 'switch1',
                                       'port_id': 'Ethernet1/4'},
-            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_3'}
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_3'},
         })
         self.port5 = utils.create_mock_object({
             "uuid": "port_uuid_5",
             "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "local_link_connection": {'switch_info': 'switch2',
                                       'port_id': 'Ethernet1/5'},
-            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_4'}
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_4'},
         })
         self.network1 = utils.create_mock_object({
             "id": "network_uuid1",
@@ -87,27 +87,39 @@ class TestListVLAN(base.TestCommand):
             "name": "test_network4",
             "network_type": "vlan",
             "provider_segmentation_id": "400",
-            "subnet_ids": []
+            "subnet_ids": ["subnet_uuid4"]
         })
         self.neutron_port1 = utils.create_mock_object({
             "id": "neutron_port_uuid_1",
             "network_id": "network_uuid1",
-            "fixed_ips": [{"subnet_id": "subnet_uuid1"}]
+            "fixed_ips": [{"subnet_id": "subnet_uuid1"}],
+            "trunk_details": {
+                "sub_ports": [{'port_id': 'neutron_subport_uuid_1'}]
+            }
         })
         self.neutron_port2 = utils.create_mock_object({
             "id": "neutron_port_uuid_2",
             "network_id": "network_uuid1",
-            "fixed_ips": [{"subnet_id": "subnet_uuid1"}]
+            "fixed_ips": [{"subnet_id": "subnet_uuid1"}],
+            "trunk_details": {}
         })
         self.neutron_port3 = utils.create_mock_object({
             "id": "neutron_port_uuid_3",
             "network_id": "network_uuid2",
-            "fixed_ips": [{"subnet_id": "subnet_uuid2"}]
+            "fixed_ips": [{"subnet_id": "subnet_uuid2"}],
+            "trunk_details": {}
         })
         self.neutron_port4 = utils.create_mock_object({
             "id": "neutron_port_uuid_4",
             "network_id": "network_uuid1",
-            "fixed_ips": [{"subnet_id": "subnet_uuid1"}]
+            "fixed_ips": [{"subnet_id": "subnet_uuid1"}],
+            "trunk_details": {}
+        })
+        self.neutron_subport1 = utils.create_mock_object({
+            "id": "neutron_subport_uuid_1",
+            "network_id": "network_uuid4",
+            "fixed_ips": [{"subnet_id": "subnet_uuid4"}],
+            "trunk_details": {}
         })
 
         self.app.client_manager.network.networks.\
@@ -117,13 +129,13 @@ class TestListVLAN(base.TestCommand):
             return_value = [self.neutron_port1,
                             self.neutron_port2,
                             self.neutron_port3,
-                            self.neutron_port4]
-
-    def test_take_action(self):
+                            self.neutron_port4,
+                            self.neutron_subport1]
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port1, self.port2, self.port3, self.port4,
                             self.port5]
 
+    def test_take_action(self):
         arglist = ['switch1']
         verifylist = []
 
@@ -135,7 +147,7 @@ class TestListVLAN(base.TestCommand):
             [['100', ['Ethernet1/1', 'Ethernet1/3']],
              ['200', ['Ethernet1/4']],
              ['300', []],
-             ['400', []]]
+             ['400', ['Ethernet1/1']]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -144,6 +156,108 @@ class TestListVLAN(base.TestCommand):
             assert_called_once_with(provider_network_type='vlan')
         self.app.client_manager.network.ports.\
             assert_called_once
+
+
+class TestListSwitchPort(base.TestCommand):
+
+    def setUp(self):
+        super(TestListSwitchPort, self).setUp()
+        self.cmd = switch.ListSwitchPort(self.app, None)
+
+        self.port1 = utils.create_mock_object({
+            "uuid": "port_uuid_1",
+            "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/1'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'},
+        })
+        self.port2 = utils.create_mock_object({
+            "uuid": "port_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/2'},
+            "internal_info": {},
+        })
+        self.port3 = utils.create_mock_object({
+            "uuid": "port_uuid_3",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/3'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'},
+        })
+        self.port4 = utils.create_mock_object({
+            "uuid": "port_uuid_3",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch2',
+                                      'port_id': 'Ethernet1/4'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_3'},
+        })
+        self.port5 = utils.create_mock_object({
+            "uuid": "port_uuid_3",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'port_id': 'Ethernet1/5'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_X'},
+        })
+        self.neutron_port1 = utils.create_mock_object({
+            "id": "neutron_port_uuid_1",
+            "network_id": "network_uuid1",
+            "fixed_ips": [{"subnet_id": "subnet_uuid1"}],
+            "trunk_details": {
+                "sub_ports": [{'port_id': 'neutron_subport_uuid_1'}]
+            }
+        })
+        self.neutron_port2 = utils.create_mock_object({
+            "id": "neutron_port_uuid_2",
+            "network_id": "network_uuid1",
+            "fixed_ips": [{"subnet_id": "subnet_uuid1"}],
+            "trunk_details": {}
+        })
+        self.neutron_port3 = utils.create_mock_object({
+            "id": "neutron_port_uuid_3",
+            "network_id": "network_uuid1",
+            "fixed_ips": [{"subnet_id": "subnet_uuid1"}],
+            "trunk_details": {}
+        })
+
+        self.app.client_manager.network.ports.\
+            return_value = [self.neutron_port1,
+                            self.neutron_port2,
+                            self.neutron_port3]
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2, self.port3, self.port4,
+                            self.port5]
+
+    @mock.patch('esiclient.utils.get_full_network_info_from_port',
+                autospec=True)
+    def test_take_action(self, mock_gfnifp):
+        def mock_gfnifp_call(np, client):
+            if np.id == 'neutron_port_uuid_1':
+                return ['net1 (100)', 'net2 (200)'], [], []
+            elif np.id == 'neutron_port_uuid_2':
+                return ['net1 (100)'], [], []
+            return [], [], []
+        mock_gfnifp.side_effect = mock_gfnifp_call
+
+        arglist = ['switch1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+        expected = (
+            ['Port', 'VLANs'],
+            [['Ethernet1/1', 'net1 (100)\nnet2 (200)'],
+             ['Ethernet1/3', 'net1 (100)'],
+             ['Ethernet1/5', '']]
+        )
+        self.assertEqual(expected, results)
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+        self.app.client_manager.network.ports.\
+            assert_called_once
+        self.assertEqual(
+            mock_gfnifp.call_count, 2)
 
 
 class TestEnableAccessPort(base.TestCommand):
