@@ -248,6 +248,7 @@ class TestListSwitchPort(base.TestCommand):
         expected = (
             ['Port', 'VLANs'],
             [['Ethernet1/1', 'net1 (100)\nnet2 (200)'],
+             ['Ethernet1/2', ''],
              ['Ethernet1/3', 'net1 (100)'],
              ['Ethernet1/5', '']]
         )

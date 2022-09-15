@@ -103,21 +103,22 @@ class ListSwitchPort(command.Lister):
 
         ports = list((port for port in ironic_client.port.list(detail=True)
                       if port.local_link_connection.get(
-                              'switch_info') == switch and
-                      port.internal_info.get('tenant_vif_port_id')))
+                              'switch_info') == switch))
         neutron_ports = list(neutron_client.ports())
 
         data = []
         for port in ports:
             switchport = port.local_link_connection.get('port_id')
-            np_id = port.internal_info.get('tenant_vif_port_id')
-            np = next((np for np in neutron_ports if np.id == np_id), None)
+            network_names = []
+            np = None
+            np_id = port.internal_info.get('tenant_vif_port_id', None)
+            if np_id:
+                np = next((np for np in neutron_ports if np.id == np_id), None)
             if np:
-                network_names, _, _ = utils.get_full_network_info_from_port(
-                    np, neutron_client)
-                data.append([switchport, "\n".join(network_names)])
-            else:
-                data.append([switchport, ''])
+                network_names, _, _ = \
+                    utils.get_full_network_info_from_port(
+                        np, neutron_client)
+            data.append([switchport, "\n".join(network_names)])
         return ["Port", "VLANs"], data
 
 
