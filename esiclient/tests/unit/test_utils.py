@@ -52,6 +52,7 @@ class TestGetNetworkInfoFromPort(TestCase):
 
         self.neutron_client = mock.Mock()
         self.neutron_client.get_network.return_value = self.network
+        self.networks_dict = {"network_uuid": self.network}
 
     def test_get_network_info_from_port(self):
         port = test_utils.create_mock_object({
@@ -61,7 +62,8 @@ class TestGetNetworkInfoFromPort(TestCase):
             "fixed_ips": [{"ip_address": '11.22.33.44'}]
         })
 
-        results = utils.get_network_info_from_port(port, self.neutron_client)
+        results = utils.get_network_info_from_port(port, self.neutron_client,
+                                                   self.networks_dict)
         self.assertEqual(('test_network (777)', '11.22.33.44'), results)
 
     def test_get_network_info_from_port_no_fixed_ips(self):
@@ -72,7 +74,8 @@ class TestGetNetworkInfoFromPort(TestCase):
             "fixed_ips": None
         })
 
-        results = utils.get_network_info_from_port(port, self.neutron_client)
+        results = utils.get_network_info_from_port(port, self.neutron_client,
+                                                   self.networks_dict)
         self.assertEqual(('test_network (777)', ''), results)
 
 
@@ -104,6 +107,9 @@ class TestGetFullNetworkInfoFromPort(TestCase):
         })
 
         self.neutron_client = mock.Mock()
+
+        self.networks_dict = {"network_uuid_1": self.network1,
+                              "network_uuid_2": self.network2}
 
         def mock_network_get(network_uuid):
             if network_uuid == "network_uuid_1":
@@ -137,7 +143,8 @@ class TestGetFullNetworkInfoFromPort(TestCase):
         })
 
         results = utils.get_full_network_info_from_port(port,
-                                                        self.neutron_client)
+                                                        self.neutron_client,
+                                                        self.networks_dict,)
         self.assertEqual((
             ['test_network (777)', 'test_network (777)',
              'test_network_2 (888)'],
@@ -155,7 +162,8 @@ class TestGetFullNetworkInfoFromPort(TestCase):
         })
 
         results = utils.get_full_network_info_from_port(port,
-                                                        self.neutron_client)
+                                                        self.neutron_client,
+                                                        self.networks_dict)
         self.assertEqual(
             (['test_network (777)'], ['test_port'], ['77.77.77.77']),
             results

@@ -72,6 +72,11 @@ class List(command.Lister):
         else:
             neutron_ports = list(neutron_client.ports())
 
+        floating_ips = list(neutron_client.ips())
+
+        networks = list(neutron_client.networks())
+        networks_dict = {n.id: n for n in networks}
+
         data = []
 
         for port in ports:
@@ -92,15 +97,26 @@ class List(command.Lister):
                 if not filter_network or filter_network.id == network_id:
                     network_names, _, fixed_ips \
                         = utils.get_full_network_info_from_port(
-                            neutron_port, neutron_client)
+                            neutron_port, neutron_client, networks_dict)
+                    floating_ip_addresses, floating_network_names \
+                        = utils.get_floating_ip(neutron_port_id,
+                                                floating_ips,
+                                                networks_dict)
                     data.append([node_name, port.address,
                                  neutron_port.name,
                                  "\n".join(network_names),
-                                 "\n".join(fixed_ips)])
+                                 "\n".join(fixed_ips),
+                                 "\n".join(floating_network_names)
+                                 if floating_network_names else None,
+                                 "\n".join(floating_ip_addresses)
+                                 if floating_ip_addresses else None]
+                                )
             elif not filter_network:
-                data.append([node_name, port.address, None, None, None])
+                data.append([node_name, port.address,
+                             None, None, None, None, None])
 
-        return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], data
+        return ["Node", "MAC Address", "Port", "Network", "Fixed IP",
+                "Floating Network", "Floating IP"], data
 
 
 class Attach(command.ShowOne):

@@ -33,13 +33,15 @@ class List(command.Lister):
 
         neutron_client = self.app.client_manager.network
         trunks = neutron_client.trunks()
+        networks = list(neutron_client.networks())
+        networks_dict = {n.id: n for n in networks}
 
         data = []
         for trunk in trunks:
             trunk_port = neutron_client.get_port(trunk.port_id)
             network_names, port_names, _ \
                 = utils.get_full_network_info_from_port(
-                    trunk_port, neutron_client)
+                    trunk_port, neutron_client, networks_dict)
             data.append([trunk.name,
                          "\n".join(port_names),
                          "\n".join(network_names)])
