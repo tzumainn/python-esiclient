@@ -105,6 +105,8 @@ class ListSwitchPort(command.Lister):
                       if port.local_link_connection.get(
                               'switch_info') == switch))
         neutron_ports = list(neutron_client.ports())
+        networks = list(neutron_client.networks())
+        networks_dict = {n.id: n for n in networks}
 
         data = []
         for port in ports:
@@ -117,7 +119,7 @@ class ListSwitchPort(command.Lister):
             if np:
                 network_names, _, _ = \
                     utils.get_full_network_info_from_port(
-                        np, neutron_client)
+                        np, neutron_client, networks_dict)
             data.append([switchport, "\n".join(network_names)])
         return ["Port", "VLANs"], data
 

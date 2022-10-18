@@ -65,16 +65,33 @@ class TestList(base.TestCommand):
         self.neutron_port1 = utils.create_mock_object({
             "id": "neutron_port_uuid_1",
             "network_id": "network_uuid",
-            "name": "node1",
+            "name": "neutron_port_1",
             "fixed_ips": [{"ip_address": "1.1.1.1"}],
             "trunk_details": None
         })
         self.neutron_port2 = utils.create_mock_object({
             "id": "neutron_port_uuid_2",
             "network_id": "network_uuid",
-            "name": "node2",
+            "name": "neutron_port_2",
             "fixed_ips": [{"ip_address": "2.2.2.2"}],
             "trunk_details": None
+        })
+        self.floating_network = utils.create_mock_object({
+            "id": "floating_network_id",
+            "name": "floating_network"
+        })
+        self.floating_ip1 = utils.create_mock_object({
+            "id": "floating_ip_uuid_1",
+            "floating_ip_address": "9.9.9.9",
+            "floating_network_id": "floating_network_id",
+            "port_id": "neutron_port_uuid_1"
+        })
+        self.floating_ip2 = utils.create_mock_object({
+            "id": "floating_ip_uuid_2",
+            "floating_ip_address": "8.8.8.8",
+            "floating_network_id": "floating_network_id",
+            "port_id": "neutron_port_uuid_2"
+
         })
 
         def mock_node_get(node_uuid):
@@ -101,9 +118,11 @@ class TestList(base.TestCommand):
         self.app.client_manager.network.ports.\
             return_value = [self.neutron_port1, self.neutron_port2]
         self.app.client_manager.network.networks.\
-            return_value = [self.network]
+            return_value = [self.network, self.floating_network]
         self.app.client_manager.baremetal.node.list.\
             return_value = [self.node1, self.node2]
+        self.app.client_manager.network.ips.\
+            return_value = [self.floating_ip1, self.floating_ip2]
 
     def test_take_action(self):
         self.app.client_manager.baremetal.port.list.\
@@ -116,10 +135,13 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-          ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-          [['node1', 'aa:aa:aa:aa:aa:aa', 'node1', 'test_network', '1.1.1.1'],
-           ['node2', 'bb:bb:bb:bb:bb:bb', None, None, None],
-           ['node2', 'cc:cc:cc:cc:cc:cc', 'node2', 'test_network', '2.2.2.2']]
+          ["Node", "MAC Address", "Port", "Network", "Fixed IP",
+           "Floating Network", "Floating IP"],
+          [['node1', 'aa:aa:aa:aa:aa:aa', 'neutron_port_1', 'test_network',
+           '1.1.1.1', 'floating_network', '9.9.9.9'],
+           ['node2', 'bb:bb:bb:bb:bb:bb', None, None, None, None, None],
+           ['node2', 'cc:cc:cc:cc:cc:cc', 'neutron_port_2', 'test_network',
+            '2.2.2.2', 'floating_network', '8.8.8.8']]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -136,8 +158,9 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-            [["node2", "dd:dd:dd:dd:dd:dd", None, None, None]]
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP",
+             "Floating Network", "Floating IP"],
+            [["node2", "dd:dd:dd:dd:dd:dd", None, None, None, None, None]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -154,9 +177,11 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-           ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
-           [['node2', 'bb:bb:bb:bb:bb:bb', None, None, None],
-            ['node2', 'cc:cc:cc:cc:cc:cc', 'node2', 'test_network', '2.2.2.2']]
+           ["Node", "MAC Address", "Port", "Network", "Fixed IP",
+            "Floating Network", "Floating IP"],
+           [['node2', 'bb:bb:bb:bb:bb:bb', None, None, None, None, None],
+            ['node2', 'cc:cc:cc:cc:cc:cc', 'neutron_port_2', 'test_network',
+             '2.2.2.2', 'floating_network', '8.8.8.8']]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -175,11 +200,14 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP",
+             "Floating Network", "Floating IP"],
             [["node1", "aa:aa:aa:aa:aa:aa",
-              "node1", "test_network", "1.1.1.1"],
+              "neutron_port_1", "test_network", "1.1.1.1",
+              "floating_network", "9.9.9.9"],
              ["node2", "cc:cc:cc:cc:cc:cc",
-              "node2", "test_network", "2.2.2.2"]]
+              "neutron_port_2", "test_network", "2.2.2.2",
+              "floating_network", "8.8.8.8"]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\
@@ -196,9 +224,11 @@ class TestList(base.TestCommand):
 
         results = self.cmd.take_action(parsed_args)
         expected = (
-            ["Node", "MAC Address", "Port", "Network", "Fixed IP"],
+            ["Node", "MAC Address", "Port", "Network", "Fixed IP",
+             "Floating Network", "Floating IP"],
             [["node2", "cc:cc:cc:cc:cc:cc",
-              "node2", "test_network", "2.2.2.2"]]
+              "neutron_port_2", "test_network", "2.2.2.2",
+              "floating_network", "8.8.8.8"]]
         )
         self.assertEqual(expected, results)
         self.app.client_manager.baremetal.port.list.\

@@ -227,11 +227,13 @@ class TestListSwitchPort(base.TestCommand):
         self.app.client_manager.baremetal.port.list.\
             return_value = [self.port1, self.port2, self.port3, self.port4,
                             self.port5]
+        self.app.client_manager.network.networks.\
+            return_value = []
 
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
                 autospec=True)
     def test_take_action(self, mock_gfnifp):
-        def mock_gfnifp_call(np, client):
+        def mock_gfnifp_call(np, n_dict, client):
             if np.id == 'neutron_port_uuid_1':
                 return ['net1 (100)', 'net2 (200)'], [], []
             elif np.id == 'neutron_port_uuid_2':

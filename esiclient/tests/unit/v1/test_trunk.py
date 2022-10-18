@@ -88,6 +88,8 @@ class TestList(base.TestCommand):
 
         self.app.client_manager.network.trunks.\
             return_value = [self.trunk1, self.trunk2]
+        self.app.client_manager.network.networks.\
+            return_value = []
 
         def mock_get_port(port_id):
             if port_id == "port_uuid_1":
@@ -101,7 +103,7 @@ class TestList(base.TestCommand):
     @mock.patch('esiclient.utils.get_full_network_info_from_port',
                 autospec=True)
     def test_take_action(self, mock_gfnifp):
-        def mock_get_fnifp(port, client):
+        def mock_get_fnifp(port, n_dict, client):
             if port.id == "port_uuid_1":
                 return (["network1", "network2", "network3"],
                         ["trunk1-network1-trunk-port",
@@ -143,8 +145,8 @@ class TestList(base.TestCommand):
                 mock.call("port_uuid_4")
             ])
         mock_gfnifp.assert_has_calls([
-                mock.call(self.port1, self.app.client_manager.network),
-                mock.call(self.port2, self.app.client_manager.network)
+                mock.call(self.port1, self.app.client_manager.network, {}),
+                mock.call(self.port2, self.app.client_manager.network, {})
             ])
 
 

@@ -25,13 +25,17 @@ def get_network_display_name(network):
         return network.name
 
 
-def get_network_info_from_port(port, client):
+def get_network_info_from_port(port, client, networks_dict={}):
     """Return Neutron network name and ips from port
 
     :param port: a Neutron port
     :param client: neutron client
+    :param networks_dict: networks dict {id:network}
     """
-    network = client.get_network(port.network_id)
+    if port.network_id in networks_dict:
+        network = networks_dict.get(port.network_id)
+    else:
+        network = client.get_network(port.network_id)
     fixed_ip = ''
     if port.fixed_ips and len(port.fixed_ips) > 0:
         fixed_ip = port.fixed_ips[0]['ip_address']
@@ -39,19 +43,21 @@ def get_network_info_from_port(port, client):
     return get_network_display_name(network), fixed_ip
 
 
-def get_full_network_info_from_port(port, client):
+def get_full_network_info_from_port(port, client, networks_dict={}):
     """Return full Neutron network name and ips from port
 
     This code iterates through subports if appropriate
 
     :param port: a Neutron port
     :param client: neutron client
+    :param networks_dict: networks dict {id:network}
     """
     network_names = []
     port_names = []
     fixed_ips = []
 
-    network_name, fixed_ip = get_network_info_from_port(port, client)
+    network_name, fixed_ip = get_network_info_from_port(port, client,
+                                                        networks_dict)
     network_names.append(network_name)
     fixed_ips.append(fixed_ip)
     port_names.append(port.name)
@@ -61,7 +67,7 @@ def get_full_network_info_from_port(port, client):
         for subport_info in subports:
             subport = client.get_port(subport_info['port_id'])
             network_name, fixed_ip = get_network_info_from_port(
-                subport, client)
+                subport, client, networks_dict)
             network_names.append(network_name)
             fixed_ips.append(fixed_ip)
             port_names.append(subport.name)
@@ -111,3 +117,19 @@ def get_network_from_vlan(vlan_id, neutron_client):
         provider_network_type='vlan',
         provider_segmentation_id=vlan_id))
     return next(iter(networks), None)
+
+
+def get_floating_ip(port_id, floating_ips, networks_dict):
+    """Return neutron port floating ips information, if any
+
+    :param port_id: Neutron port ID
+    :param floating_ips: floating ips list
+    :param networks_dict: Neutron networks dict {"id": "name"}
+    """
+    floating_ip_addresses = [f_ip.floating_ip_address for f_ip in floating_ips
+                             if f_ip.port_id == port_id]
+    floating_network_ids = [f_ip.floating_network_id for f_ip in floating_ips
+                            if f_ip.port_id == port_id]
+    floating_network_names = [networks_dict.get(id).name
+                              for id in floating_network_ids]
+    return floating_ip_addresses, floating_network_names
