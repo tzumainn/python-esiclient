@@ -175,6 +175,9 @@ class Attach(command.ShowOne):
         if parsed_args.network:
             network = neutron_client.find_network(parsed_args.network)
             port = None
+            if network is None:
+                raise exceptions.CommandError(
+                    "ERROR: Unknown network")
         elif parsed_args.port:
             port = neutron_client.find_port(parsed_args.port)
             if port is None:
@@ -217,7 +220,8 @@ class Attach(command.ShowOne):
             print("Attaching network {1} to node {0}{2}".format(
                 node.name, network.name, mac_string))
             port_name = utils.get_port_name(network.name, prefix=node.name)
-            port = utils.get_or_create_port(port_name, network, neutron_client)
+            port = utils.get_or_create_port(port_name, network,
+                                            neutron_client)
             ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
             port = neutron_client.get_port(port.id)
         elif parsed_args.trunk:

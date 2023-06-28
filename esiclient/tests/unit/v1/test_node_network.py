@@ -469,6 +469,24 @@ class TestAttach(base.TestCommand):
             'ERROR: You must specify either network, port, or trunk',
             self.cmd.take_action, parsed_args)
 
+    def test_take_action_invalid_network_exception(self):
+        self.app.client_manager.baremetal.node.get.\
+            return_value = self.node
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1]
+        self.app.client_manager.network.find_network.\
+            return_value = None
+
+        arglist = ['node1', '--network', 'test_network_invalid']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Unknown network',
+            self.cmd.take_action, parsed_args)
+
     def test_take_action_port_free_exception(self):
         self.app.client_manager.baremetal.node.get.\
             return_value = self.node
