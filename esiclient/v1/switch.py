@@ -124,6 +124,32 @@ class ListSwitchPort(command.Lister):
         return ["Port", "VLANs"], data
 
 
+class List(command.Lister):
+    """List Switches """
+
+    log = logging.getLogger(__name__ + ".List")
+
+    def get_parser(self, prog_name):
+        parser = super(List, self).get_parser(prog_name)
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+
+        ironic_client = self.app.client_manager.baremetal
+
+        ports = ironic_client.port.list(detail=True)
+
+        data = []
+        for port in ports:
+            switch = port.local_link_connection.get('switch_info')
+            switch_id = port.local_link_connection.get('switch_id')
+
+            if [switch, switch_id] not in data:
+                data.append([switch, switch_id])
+        return ["Switch Name", "Switch ID"], data
+
+
 class EnableAccessPort(command.ShowOne):
     """Configure Switchport Access"""
 
