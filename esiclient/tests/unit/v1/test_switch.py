@@ -263,6 +263,62 @@ class TestListSwitchPort(base.TestCommand):
             mock_gfnifp.call_count, 2)
 
 
+class TestList(base.TestCommand):
+
+    def setUp(self):
+        super(TestList, self).setUp()
+        self.cmd = switch.List(self.app, None)
+
+        self.port1 = utils.create_mock_object({
+            "uuid": "port_uuid_1",
+            "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'switch_id': 'e4:c7:22:c0:0b:69'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'},
+        })
+        self.port2 = utils.create_mock_object({
+            "uuid": "port_uuid_2",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch1',
+                                      'switch_id': 'e4:c7:22:c0:0b:69'},
+            "internal_info": {},
+        })
+        self.port3 = utils.create_mock_object({
+            "uuid": "port_uuid_3",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch2',
+                                      'switch_id': 'aa:aa:aa:aa:aa:aa'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'},
+        })
+        self.port4 = utils.create_mock_object({
+            "uuid": "port_uuid_3",
+            "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "local_link_connection": {'switch_info': 'switch3',
+                                      'switch_id': 'bb:bb:bb:bb:bb:bb'},
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_3'},
+        })
+
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2, self.port3, self.port4]
+
+    def test_take_action(self):
+        arglist = []
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+        expected = (
+            ["Switch Name", "Switch ID"],
+            [['switch1', 'e4:c7:22:c0:0b:69'],
+             ['switch2', 'aa:aa:aa:aa:aa:aa'],
+             ['switch3', 'bb:bb:bb:bb:bb:bb']]
+        )
+        self.assertEqual(expected, results)
+        self.app.client_manager.baremetal.port.list.\
+            assert_called_once_with(detail=True)
+
+
 class TestEnableAccessPort(base.TestCommand):
 
     def setUp(self):
