@@ -50,12 +50,12 @@ Detach network from a node.
 
 ```
 openstack esi node network detach
+   [--port <port>]
    <node>
-   <port>
 ```
 
+- `--port <port>`:  Port (name or UUID)
 - `node`: Node (name or UUID)
-- `port`: Port (name or UUID)
 
 ## `openstack esi trunk <command>`
 

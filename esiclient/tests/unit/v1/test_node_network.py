@@ -497,7 +497,7 @@ class TestDetach(base.TestCommand):
             "name": "node1",
             "provision_state": "active"
         })
-        self.neutron_port = utils.create_mock_object({
+        self.neutron_port1 = utils.create_mock_object({
             "id": "neutron_port_uuid_1",
             "network_id": "network_uuid",
             "name": "node1",
@@ -505,28 +505,73 @@ class TestDetach(base.TestCommand):
             "fixed_ips": [{"ip_address": "2.2.2.2"}],
             "trunk_details": None
         })
+        self.neutron_port2 = utils.create_mock_object({
+            "id": "neutron_port_uuid_2",
+            "network_id": "network_uuid",
+            "name": "node1",
+            "mac_address": "cc:cc:cc:cc:cc:cc",
+            "fixed_ips": [{"ip_address": "3.3.3.3"}],
+            "trunk_details": None
+        })
+        self.port1 = utils.create_mock_object({
+            "uuid": "port_uuid_1",
+            "node_uuid": "node_uuid_1",
+            "address": "aa:aa:aa:aa:aa:aa",
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'}
+        })
+        self.port2 = utils.create_mock_object({
+            "uuid": "port_uuid_2",
+            "node_uuid": "node_uuid_1",
+            "address": "bb:bb:bb:bb:bb:bb",
+            "internal_info": {}
+        })
+        self.port3 = utils.create_mock_object({
+            "uuid": "port_uuid_3",
+            "node_uuid": "node_uuid_1",
+            "address": "cc:cc:cc:cc:cc:cc",
+            "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'}
+        })
 
         self.app.client_manager.baremetal.node.get.\
             return_value = self.node
 
     def test_take_action(self):
         self.app.client_manager.network.find_port.\
-            return_value = self.neutron_port
+            return_value = self.neutron_port1
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1]
 
-        arglist = ['node1', 'node1']
+        arglist = ['node1']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
 
         self.cmd.take_action(parsed_args)
         self.app.client_manager.baremetal.node.vif_detach.\
-            assert_called_once_with('node1', self.neutron_port.id)
+            assert_called_once_with('node1', self.neutron_port1.id)
+
+    def test_take_multiple_port_action(self):
+        self.app.client_manager.network.find_port.\
+            return_value = self.neutron_port1
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
+
+        arglist = ['node1', '--port', 'port_uuid_1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+        self.app.client_manager.baremetal.node.vif_detach.\
+            assert_called_once_with('node1', self.neutron_port1.id)
 
     def test_take_action_port_exception(self):
         self.app.client_manager.network.find_port.\
             return_value = None
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2]
 
-        arglist = ['node1', 'bad-port']
+        arglist = ['node1', '--port', 'bad-port']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
@@ -534,5 +579,23 @@ class TestDetach(base.TestCommand):
         self.assertRaisesRegex(
             exceptions.CommandError,
             'ERROR: Port bad-port not attached to node node1',
+            self.cmd.take_action, parsed_args
+        )
+
+    def test_take_action_mutiple_port_exception(self):
+        self.app.client_manager.network.find_port.\
+            return_value = None
+        self.app.client_manager.baremetal.port.list.\
+            return_value = [self.port1, self.port2, self.port3]
+
+        arglist = ['node1']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.assertRaisesRegex(
+            exceptions.CommandError,
+            'ERROR: Node node1 is associated with multiple ports.\
+                    Port must be specified with --port',
             self.cmd.take_action, parsed_args
         )

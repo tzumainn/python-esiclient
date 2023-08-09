@@ -249,7 +249,7 @@ class Detach(command.Command):
             metavar="<node>",
             help=_("Name or UUID of the node"))
         parser.add_argument(
-            "port",
+            "--port",
             metavar="<port>",
             help=_("Name or UUID of the port"))
 
@@ -264,19 +264,33 @@ class Detach(command.Command):
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
 
-        node = None
-        port = None
+        node = ironic_client.node.get(node_uuid)
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            f1 = executor.submit(ironic_client.node.get, node_uuid)
-            f2 = executor.submit(neutron_client.find_port, port_uuid)
-            node = f1.result()
-            port = f2.result()
+        if port_uuid:
+            port = neutron_client.find_port(port_uuid)
+            if not port:
+                raise exceptions.CommandError(
+                    "ERROR: Port {1} not attached to node {0}".format(
+                        node.name, port_uuid))
+        else:
+            bm_ports = ironic_client.port.list(node=node_uuid, detail=True)
 
-        if not port:
-            raise exceptions.CommandError(
-                "ERROR: Port {1} not attached to node {0}".format(
-                    node.name, port_uuid))
+            mapped_node_port_list = []
+            for bm_port in bm_ports:
+                if bm_port.internal_info.get("tenant_vif_port_id"):
+                    mapped_node_port_list.append(bm_port)
+            if(len(mapped_node_port_list) == 0):
+                raise exceptions.CommandError(
+                    "ERROR: Node {0} is not associated with any port".format(
+                        node.name))
+            elif(len(mapped_node_port_list) > 1):
+                raise exceptions.CommandError(
+                    "ERROR: Node {0} is associated with multiple ports.\
+                    Port must be specified with --port".format(node.name))
+            elif(len(mapped_node_port_list) == 1):
+                port_uuid = mapped_node_port_list[0].internal_info[
+                    "tenant_vif_port_id"]
+                port = neutron_client.find_port(port_uuid)
 
         print("Detaching node {0} from port {1}".format(
             node.name, port.name))
