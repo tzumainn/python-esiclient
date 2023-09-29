@@ -156,38 +156,16 @@ class TestCreate(base.TestCommand):
         super(TestCreate, self).setUp()
         self.cmd = trunk.Create(self.app, None)
 
-        self.network1 = utils.create_mock_object({
+        self.network = utils.create_mock_object({
             "id": "network_uuid_1",
             "name": "network1",
             "provider_segmentation_id": 111
-        })
-        self.network2 = utils.create_mock_object({
-            "id": "network_uuid_2",
-            "name": "network2",
-            "provider_segmentation_id": 222
-        })
-        self.network3 = utils.create_mock_object({
-            "id": "network_uuid_3",
-            "name": "network3",
-            "provider_segmentation_id": 333
         })
         self.port = utils.create_mock_object({
             "id": "port_uuid_1",
             "network_id": "network_uuid_1",
             "name": "trunk-network1-trunk-port",
             "mac_address": "aa:aa:aa:aa:aa:aa",
-        })
-        self.subport2 = utils.create_mock_object({
-            "id": "port_uuid_2",
-            "network_id": "network_uuid_2",
-            "name": "trunk-network2-sub-port",
-            "mac_address": "bb:bb:bb:bb:bb:bb",
-        })
-        self.subport3 = utils.create_mock_object({
-            "id": "port_uuid_3",
-            "network_id": "network_uuid_3",
-            "name": "trunk-network3-sub-port",
-            "mac_address": "cc:cc:cc:cc:cc:cc",
         })
         self.trunk = utils.create_mock_object({
             "id": "trunk_uuid",
@@ -207,35 +185,14 @@ class TestCreate(base.TestCommand):
             ]
         })
 
-        def mock_find_network(network_name):
-            if network_name == "network1":
-                return self.network1
-            if network_name == "network2":
-                return self.network2
-            if network_name == "network3":
-                return self.network3
-            return None
-        self.app.client_manager.network.find_network.\
-            side_effect = mock_find_network
+        self.app.client_manager.network.find_network. \
+            return_value = self.network
 
-        def mock_create_port(name, network_id, device_owner):
-            if network_id == "network_uuid_1":
-                return self.port
-            if network_id == "network_uuid_2":
-                return self.subport2
-            if network_id == "network_uuid_3":
-                return self.subport3
-            return None
-        self.app.client_manager.network.create_port.\
-            side_effect = mock_create_port
+    @mock.patch('esiclient.utils.create_trunk',
+                autospec=True)
+    def test_take_action(self, mock_create_trunk):
+        mock_create_trunk.return_value = self.trunk, self.port
 
-        self.app.client_manager.network.ports.\
-            return_value = []
-
-        self.app.client_manager.network.create_trunk.\
-            return_value = self.trunk
-
-    def test_take_action(self):
         arglist = ['trunk', '--native-network', 'network1',
                    '--tagged-networks', 'network2',
                    '--tagged-networks', 'network3']
@@ -256,37 +213,15 @@ class TestCreate(base.TestCommand):
         )
 
         self.assertEqual(expected, results)
-        self.app.client_manager.network.create_port.\
-            assert_has_calls([
-                mock.call(name="esi-trunk-network1-trunk-port",
-                          network_id="network_uuid_1",
-                          device_owner='baremetal:none'),
-                mock.call(name="esi-trunk-network2-sub-port",
-                          network_id="network_uuid_2",
-                          device_owner='baremetal:none'),
-                mock.call(name="esi-trunk-network3-sub-port",
-                          network_id="network_uuid_3",
-                          device_owner='baremetal:none')
-            ])
         self.app.client_manager.network.find_network.\
             assert_has_calls([
                 mock.call("network1"),
-                mock.call("network2"),
-                mock.call("network3")
             ])
-        self.app.client_manager.network.create_trunk.\
-            assert_called_once_with(
-                name="trunk",
-                port_id="port_uuid_1",
-                sub_ports=[
-                    {'port_id': 'port_uuid_2',
-                     'segmentation_type': 'vlan',
-                     'segmentation_id': 222},
-                    {'port_id': 'port_uuid_3',
-                     'segmentation_type': 'vlan',
-                     'segmentation_id': 333}
-                ]
-            )
+        mock_create_trunk.assert_called_once_with(
+            self.app.client_manager.network,
+            'trunk', self.network,
+            ['network2', 'network3']
+        )
 
 
 class TestDelete(base.TestCommand):

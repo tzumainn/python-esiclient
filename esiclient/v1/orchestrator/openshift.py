@@ -231,9 +231,14 @@ class Orchestrate(command.Lister):
                     node = ironic_client.node.get(node_name)
                     if node.provision_state == 'available':
                         print("* deploying %s" % node_name)
+                        port_name = utils.get_port_name(
+                            provisioning_network.name, prefix=node_name)
+                        port = utils.get_or_create_port(
+                            port_name,
+                            provisioning_network, neutron_client)
                         utils.boot_node_from_url(
-                            node_name, image_url, provisioning_network,
-                            ironic_client, neutron_client)
+                            node_name, image_url, port['id'],
+                            ironic_client)
                     else:
                         print("* %s is in %s state" %
                               (node_name, node.provision_state))

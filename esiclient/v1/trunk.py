@@ -84,30 +84,9 @@ class Create(command.ShowOne):
         network = neutron_client.find_network(parsed_args.native_network)
         tagged_networks = parsed_args.tagged_networks
 
-        trunk_port_name = utils.get_port_name(
-            network.name, prefix=trunk_name, suffix='trunk-port')
-        trunk_port = utils.get_or_create_port(
-            trunk_port_name, network, neutron_client)
-
-        sub_ports = []
-        for tagged_network_name in tagged_networks:
-            tagged_network = neutron_client.find_network(
-                tagged_network_name)
-            sub_port_name = utils.get_port_name(
-                tagged_network.name, prefix=trunk_name, suffix='sub-port')
-            sub_port = utils.get_or_create_port(
-                sub_port_name, tagged_network, neutron_client)
-            sub_ports.append({
-                'port_id': sub_port.id,
-                'segmentation_type': 'vlan',
-                'segmentation_id': tagged_network.provider_segmentation_id
-            })
-
-        trunk = neutron_client.create_trunk(
-            name=trunk_name,
-            port_id=trunk_port.id,
-            sub_ports=sub_ports
-        )
+        trunk, trunk_port = utils.create_trunk(
+            neutron_client, trunk_name, network,
+            tagged_networks)
 
         return ["Trunk", "Port", "Sub Ports"], \
             [trunk.name,

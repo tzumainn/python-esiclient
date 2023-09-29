@@ -10,6 +10,8 @@
 #   License for the specific language governing permissions and limitations
 #   under the License.
 
+import subprocess
+
 
 def get_network_display_name(network):
     """Return Neutron network name with vlan, if any
@@ -183,16 +185,58 @@ def get_floating_ip(port_id, floating_ips, networks_dict):
     return floating_ip_addresses, floating_network_names
 
 
-def boot_node_from_url(node, url, network, ironic_client, neutron_client):
-    port_name = get_port_name(network.name, prefix=node)
-    port = get_or_create_port(port_name, network, neutron_client)
+def provision_node_with_image(node_uuid, resource_class, port_uuid, image_uuid,
+                              ssh_key):
+    subprocess.run(['metalsmith', 'deploy',
+                    '--image', image_uuid,
+                    '--ssh-public-key', ssh_key,
+                    '--resource-class', resource_class,
+                    '--candidate', node_uuid,
+                    '--port', port_uuid])
+    return
+
+
+def boot_node_from_url(node_uuid, url, port_uuid, ironic_client):
     node_update = [{'path': '/instance_info/deploy_interface',
                     'value': 'ramdisk',
                     'op': 'add'},
                    {'path': '/instance_info/boot_iso',
                     'value': url,
                     'op': 'add'}]
-    ironic_client.node.update(node, node_update)
-    ironic_client.node.vif_attach(node, port['id'])
-    ironic_client.node.set_provision_state(node, 'active')
+    ironic_client.node.update(node_uuid, node_update)
+    ironic_client.node.vif_attach(node_uuid, port_uuid)
+    ironic_client.node.set_provision_state(node_uuid, 'active')
     return
+
+
+def create_trunk(neutron_client, trunk_name, network, tagged_networks=[]):
+    trunk_port_name = get_port_name(
+        network.name, prefix=trunk_name, suffix='trunk-port')
+    trunk_port = neutron_client.create_port(
+            name=trunk_port_name,
+            network_id=network.id,
+            device_owner='baremetal:none'
+        )
+
+    sub_ports = []
+    for tagged_network_name in tagged_networks:
+        tagged_network = neutron_client.find_network(tagged_network_name)
+        sub_port_name = get_port_name(
+            tagged_network.name, prefix=trunk_name, suffix='sub-port')
+        sub_port = neutron_client.create_port(
+            name=sub_port_name,
+            network_id=tagged_network.id,
+            device_owner='baremetal:none'
+        )
+        sub_ports.append({
+            'port_id': sub_port.id,
+            'segmentation_type': 'vlan',
+            'segmentation_id': tagged_network.provider_segmentation_id
+        })
+
+    trunk = neutron_client.create_trunk(
+        name=trunk_name,
+        port_id=trunk_port.id,
+        sub_ports=sub_ports)
+
+    return trunk, trunk_port
