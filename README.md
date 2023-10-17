@@ -246,3 +246,33 @@ openstack esi switch trunk remove vlan
 - `switch`: Switch
 - `switchport`: Switchport
 - `vlan`: VLAN
+
+## `openstack esi orchestrate <command>`
+
+These commands orchestrate a bare metal cluster
+
+### `openstack esi orchestrate openshift`
+
+Orchestrate an OpenShift cluster.
+
+```
+openstack esi orchestrate openshift <config-file>
+```
+
+- `<config file>`: Configuration file; for example
+
+```
+{
+    "cluster_name": "my-cluster",
+    "openshift_version": "4.13.12",
+    "high_availability_mode": "Full",
+    "base_dns_domain": "my.domain",
+    "api_vip": "192.168.1.250",
+    "ingress_vip": "192.168.1.249",
+    "ssh_public_key": "my-public-key",
+    "external_network_name": "external",
+    "private_network_name": "my-private-network",
+    "private_subnet_name": "my-private-subnet",
+    "nodes": ["node1", "node2", "node3"]
+}
+```
