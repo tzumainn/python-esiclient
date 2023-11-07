@@ -98,6 +98,21 @@ def get_or_create_port(port_name, network, client):
     return port
 
 
+def get_or_create_port_by_ip(ip, port_name, network, subnet, client):
+    ip_search_string = "ip_address=%s" % ip
+    ports = list(client.ports(fixed_ips=ip_search_string))
+    if len(ports) > 0:
+        port = ports[0]
+    else:
+        port = client.create_port(
+            name=port_name,
+            network_id=network.id,
+            device_owner='baremetal:none',
+            fixed_ips=[{"subnet_id": subnet.id, "ip_address": ip}]
+        )
+    return port
+
+
 def get_switch_trunk_name(switch, switchport):
     return switch + "-" + switchport
 
@@ -119,6 +134,39 @@ def get_network_from_vlan(vlan_id, neutron_client):
     return next(iter(networks), None)
 
 
+def get_or_assign_port_floating_ip(port, fip_network, client):
+    """Get or assign a floating IP to a port
+
+    :param port: port
+    :param fip_network: floating IP network
+    :param client: Neutron client
+    """
+    fixed_ip = port.fixed_ips[0]['ip_address']
+    fips = list(client.ips(fixed_ip_address=fixed_ip))
+    if len(fips) > 0:
+        fip = fips[0]
+    else:
+        fip = get_or_create_floating_ip(fip_network, client)
+        client.update_ip(fip, port_id=port.id)
+    return fip
+
+
+def get_or_create_floating_ip(fip_network, client):
+    """Return a free floating IP
+
+    :param fip_network: floating IP network
+    :param client: Neutron client
+    """
+    fips = list(client.ips(network=fip_network.id, fixed_ip_address=''))
+    if len(fips) > 0:
+        fip = fips[0]
+    else:
+        fip = client.create_ip(
+            floating_network_id=fip_network.id,
+        )
+    return fip
+
+
 def get_floating_ip(port_id, floating_ips, networks_dict):
     """Return neutron port floating ips information, if any
 
@@ -133,3 +181,18 @@ def get_floating_ip(port_id, floating_ips, networks_dict):
     floating_network_names = [networks_dict.get(id).name
                               for id in floating_network_ids]
     return floating_ip_addresses, floating_network_names
+
+
+def boot_node_from_url(node, url, network, ironic_client, neutron_client):
+    port_name = get_port_name(network.name, prefix=node)
+    port = get_or_create_port(port_name, network, neutron_client)
+    node_update = [{'path': '/instance_info/deploy_interface',
+                    'value': 'ramdisk',
+                    'op': 'add'},
+                   {'path': '/instance_info/boot_iso',
+                    'value': url,
+                    'op': 'add'}]
+    ironic_client.node.update(node, node_update)
+    ironic_client.node.vif_attach(node, port['id'])
+    ironic_client.node.set_provision_state(node, 'active')
+    return
