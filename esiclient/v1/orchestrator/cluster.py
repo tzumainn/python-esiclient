@@ -13,6 +13,7 @@
 import concurrent.futures
 import json
 import logging
+import time
 
 from osc_lib.command import command
 from osc_lib.i18n import _
@@ -222,3 +223,78 @@ class Orchestrate(command.Lister):
 
         return ["Node", "Port", "Network", "Fixed IP",
                 "Floating Network", "Floating IP"], data
+
+
+class Undeploy(command.Command):
+    """Undeploy a cluster from ESI nodes"""
+
+    log = logging.getLogger(__name__ + ".Undeploy")
+
+    def get_parser(self, prog_name):
+        parser = super(Undeploy, self).get_parser(prog_name)
+
+        parser.add_argument(
+            "cluster_config_file",
+            metavar="<cluster_config_file>",
+            help=_("File describing the cluster configuration"))
+
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+
+        cluster_config_file = parsed_args.cluster_config_file
+        with open(cluster_config_file) as f:
+            cluster_config = json.load(f)
+
+        print("STARTING UNDEPLOY")
+
+        ironic_client = self.app.client_manager.baremetal
+        neutron_client = self.app.client_manager.network
+        node_configs = cluster_config['node_configs']
+
+        uuid_node_configs = [node_config for node_config in node_configs
+                             if 'node_uuids' in node_config['nodes']]
+        count = 0
+        for node_config in uuid_node_configs:
+            count += 1
+            print("* undeploying %s of %s node configs" % (
+                count, len(uuid_node_configs)))
+            node_uuids = node_config['nodes']['node_uuids']
+            network_config = node_config['network']
+            network_uuid = network_config.get('network_uuid', None)
+            network = neutron_client.find_network(network_uuid)
+            for node in node_uuids:
+                print("   * %s" % node)
+                ironic_client.node.set_provision_state(node, 'deleted')
+                print("   * waiting for nodes to start undeploy before"
+                      " deleting ports")
+                time.sleep(15)
+                if 'tagged_network_uuids' in network_config:
+                    trunk_name = "esi-%s-trunk" % node
+                    trunk = neutron_client.find_trunk(trunk_name)
+                    if trunk:
+                        print("   * %s" % trunk_name)
+                        utils.delete_trunk(neutron_client, trunk)
+                else:
+                    port_name = "esi-%s-%s" % (node, network.name)
+                    port = neutron_client.find_port(port_name)
+                    if port:
+                        print("   * %s" % port_name)
+                        neutron_client.delete_port(port.id)
+
+        non_uuid_node_configs = [node_config for node_config in node_configs
+                                 if 'node_uuids' not in node_config['nodes']]
+        if len(non_uuid_node_configs) > 0:
+            print("* %s node configs were skipped, as they do not"
+                  " specify specific nodes" % len(non_uuid_node_configs))
+            print("   * these nodes and ports will have to be removed"
+                  " manually")
+            print("       openstack baremetal node undeploy <node>")
+            print("       openstack port delete <port>")
+
+        print("UNDEPLOY COMPLETE")
+        print("-----------------")
+        print("* node cleaning will take a while to complete")
+        print("* run `openstack baremetal node list` to see if"
+              " they are in the `available` state")

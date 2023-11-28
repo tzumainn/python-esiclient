@@ -554,3 +554,45 @@ class TestCreateTrunk(TestCase):
                      'segmentation_id': 333}
                 ]
             )
+
+
+class TestDeleteTrunk(TestCase):
+
+    def setUp(self):
+        super(TestDeleteTrunk, self).setUp()
+
+        self.trunk = test_utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "port_uuid_1",
+            "sub_ports": [
+                {
+                    "port_id": 'port_uuid_2',
+                    "segmentation_id": '222',
+                    "segmentation_type": 'vlan'
+                },
+                {
+                    "port_id": 'port_uuid_3',
+                    "segmentation_id": '333',
+                    "segmentation_type": 'vlan'
+                }
+            ]
+        })
+
+        self.neutron_client = mock.Mock()
+        self.neutron_client.delete_trunk.\
+            return_value = None
+        self.neutron_client.delete_port.\
+            return_value = None
+
+    def test_delete_trunk(self):
+        utils.delete_trunk(self.neutron_client, self.trunk)
+
+        self.neutron_client.delete_trunk.\
+            assert_called_once_with("trunk_uuid")
+        self.neutron_client.delete_port.\
+            assert_has_calls([
+                mock.call("port_uuid_2"),
+                mock.call("port_uuid_3"),
+                mock.call("port_uuid_1"),
+            ])

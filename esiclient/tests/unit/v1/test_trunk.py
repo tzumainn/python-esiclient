@@ -260,7 +260,9 @@ class TestDelete(base.TestCommand):
         self.app.client_manager.network.delete_port.\
             return_value = None
 
-    def test_take_action(self):
+    @mock.patch('esiclient.utils.delete_trunk',
+                autospec=True)
+    def test_take_action(self, mock_delete_trunk):
         arglist = ['trunk']
         verifylist = []
 
@@ -270,16 +272,12 @@ class TestDelete(base.TestCommand):
 
         self.app.client_manager.network.find_trunk.\
             assert_called_once_with("trunk")
-        self.app.client_manager.network.delete_trunk.\
-            assert_called_once_with("trunk_uuid")
-        self.app.client_manager.network.delete_port.\
-            assert_has_calls([
-                mock.call("port_uuid_2"),
-                mock.call("port_uuid_3"),
-                mock.call("port_uuid_1"),
-            ])
+        mock_delete_trunk.assert_called_once_with(
+            self.app.client_manager.network, self.trunk)
 
-    def test_take_action_no_trunk(self):
+    @mock.patch('esiclient.utils.delete_trunk',
+                autospec=True)
+    def test_take_action_no_trunk(self, mock_delete_trunk):
         arglist = ['trunk2']
         verifylist = []
 
@@ -289,6 +287,7 @@ class TestDelete(base.TestCommand):
             exceptions.CommandError,
             'ERROR: no trunk named trunk2',
             self.cmd.take_action, parsed_args)
+        mock_delete_trunk.assert_not_called
 
 
 class TestAddNetwork(base.TestCommand):

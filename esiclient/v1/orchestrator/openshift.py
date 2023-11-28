@@ -371,3 +371,92 @@ class Orchestrate(command.Lister):
         return ["Endpoint", "IP"], [
             ["API", api_fip.floating_ip_address],
             ["apps", apps_fip.floating_ip_address]]
+
+
+class Undeploy(command.Command):
+    """Undeploy an OpenShift cluster from ESI nodes"""
+
+    log = logging.getLogger(__name__ + ".Undeploy")
+    REQUIRED_FIELDS = ['nodes', 'private_network_name', 'api_vip',
+                       'ingress_vip']
+
+    def get_parser(self, prog_name):
+        parser = super(Undeploy, self).get_parser(prog_name)
+
+        parser.add_argument(
+            "cluster_config_file",
+            metavar="<cluster_config_file>",
+            help=_("File describing the cluster configuration"))
+
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+
+        with open(parsed_args.cluster_config_file) as f:
+            cluster_config = json.load(f)
+
+        missing_fields = list(
+            set(self.REQUIRED_FIELDS).difference(cluster_config.keys()))
+        if missing_fields:
+            raise OrchestrationException(
+                "Please specify these missing values in your config file: %s" %
+                missing_fields)
+
+        nodes = cluster_config.get('nodes')
+        provisioning_network_name = cluster_config.get(
+            'provisioning_network_name', 'provisioning')
+        private_network_name = cluster_config.get('private_network_name')
+        api_vip = cluster_config.get('api_vip')
+        ingress_vip = cluster_config.get('ingress_vip')
+
+        ironic_client = self.app.client_manager.baremetal
+        neutron_client = self.app.client_manager.network
+
+        print("STARTING UNDEPLOY")
+
+        # delete apps and API floating and fixed IPs
+        print("* removing API and ingress ports and fips")
+        for ip in [api_vip, ingress_vip]:
+            print("   * %s" % ip)
+            ip_search_string = "ip_address=%s" % ip
+            ports = list(neutron_client.ports(fixed_ips=ip_search_string))
+            if len(ports) > 0:
+                port = ports[0]
+                fips = list(neutron_client.ips(fixed_ip_address=ip))
+                if len(fips) > 0:
+                    fip = fips[0]
+                    print("   * %s" % fip.floating_ip_address)
+                    neutron_client.delete_ip(fip.id)
+                neutron_client.delete_port(port.id)
+
+        # undeploy nodes
+        print("* undeploying nodes")
+        for node in nodes:
+            print("   * %s" % node)
+            ironic_client.node.set_provision_state(node, 'deleted')
+        print("* waiting for nodes to start undeploy before deleting ports")
+        time.sleep(15)
+
+        # delete provisioning and private network ports
+        print("* deleting Neutron ports")
+        for node in nodes:
+            provisioning_port_name = utils.get_port_name(
+                provisioning_network_name, prefix=node)
+            provisioning_port = neutron_client.find_port(
+                provisioning_port_name)
+            if provisioning_port:
+                print("   * %s" % provisioning_port_name)
+                neutron_client.delete_port(provisioning_port.id)
+            private_port_name = utils.get_port_name(
+                private_network_name, prefix=node)
+            private_port = neutron_client.find_port(private_port_name)
+            if private_port:
+                print("   * %s" % private_port_name)
+                neutron_client.delete_port(private_port.id)
+
+        print("UNDEPLOY COMPLETE")
+        print("-----------------")
+        print("* node cleaning will take a while to complete")
+        print("* run `openstack baremetal node list` to see if"
+              " they are in the `available` state")

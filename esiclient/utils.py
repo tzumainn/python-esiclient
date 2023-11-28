@@ -240,3 +240,13 @@ def create_trunk(neutron_client, trunk_name, network, tagged_networks=[]):
         sub_ports=sub_ports)
 
     return trunk, trunk_port
+
+
+def delete_trunk(neutron_client, trunk):
+    port_ids_to_delete = [sub_port['port_id']
+                          for sub_port in trunk.sub_ports]
+    port_ids_to_delete.append(trunk.port_id)
+
+    neutron_client.delete_trunk(trunk.id)
+    for port_id in port_ids_to_delete:
+        neutron_client.delete_port(port_id)
