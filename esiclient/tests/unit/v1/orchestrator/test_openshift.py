@@ -263,6 +263,19 @@ class TestOrchestrate(base.TestCommand):
         self.app.client_manager.baremetal.node.vif_set_boot_device.\
             return_value = None
 
+        self.provisioning_port1 = {
+            "id": "provisioning_port_uuid_1",
+            "network_id": "network_uuid_2",
+        }
+        self.provisioning_port2 = {
+            "id": "provisioning_port_uuid_2",
+            "network_id": "network_uuid_2",
+        }
+        self.provisioning_port3 = {
+            "id": "provisioning_port_uuid_3",
+            "network_id": "network_uuid_2",
+        }
+
         self.private_port1 = {
             "id": "private_port_uuid_1",
             "network_id": "network_uuid_1",
@@ -272,7 +285,7 @@ class TestOrchestrate(base.TestCommand):
             "network_id": "network_uuid_1",
         }
         self.private_port3 = {
-            "id": "port_uuid_3",
+            "id": "private_port_uuid_3",
             "network_id": "network_uuid_1",
         }
 
@@ -350,7 +363,9 @@ class TestOrchestrate(base.TestCommand):
             MockResponse({'status': 'installing'}),
             MockResponse({'status': 'installed'}),
         ]
-        mock_gocp.side_effect = [self.private_port1,
+        mock_gocp.side_effect = [self.provisioning_port1,
+                                 self.provisioning_port2,
+                                 self.private_port1,
                                  self.private_port2,
                                  self.private_port3]
         mock_gocpbi.side_effect = [self.api_port, self.apps_port]
@@ -422,15 +437,17 @@ class TestOrchestrate(base.TestCommand):
         ])
         assert mock_bnfu.call_count == 2
         mock_bnfu.assert_has_calls([
-            call('node1', 'this-is-a-url', self.provisioning_network,
-                 self.app.client_manager.baremetal,
-                 self.app.client_manager.network),
-            call('node2', 'this-is-a-url', self.provisioning_network,
-                 self.app.client_manager.baremetal,
-                 self.app.client_manager.network),
+            call('node1', 'this-is-a-url', 'provisioning_port_uuid_1',
+                 self.app.client_manager.baremetal),
+            call('node2', 'this-is-a-url', 'provisioning_port_uuid_2',
+                 self.app.client_manager.baremetal),
         ])
-        assert mock_gocp.call_count == 3
+        assert mock_gocp.call_count == 5
         mock_gocp.assert_has_calls([
+            call('esi-node1-provisioning_network', self.provisioning_network,
+                 self.app.client_manager.network),
+            call('esi-node2-provisioning_network', self.provisioning_network,
+                 self.app.client_manager.network),
             call('esi-node1-private_network', self.private_network,
                  self.app.client_manager.network),
             call('esi-node2-private_network', self.private_network,

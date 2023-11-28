@@ -401,30 +401,16 @@ class TestBootNodeFromURL(TestCase):
 
     def setUp(self):
         super(TestBootNodeFromURL, self).setUp()
-        self.node = "node_uuid"
+        self.node_uuid = "node_uuid"
         self.url = 'http://test.test/test'
-        self.network = test_utils.create_mock_object({
-            "id": "network_uuid",
-            "name": "test_network",
-        })
-        self.port_name = 'test_port'
-        self.port = {
-            "id": "port_uuid",
-            "name": self.port_name,
-            "status": "DOWN"
-        }
+        self.port_uuid = 'port_uuid'
 
-        self.neutron_client = mock.Mock()
         self.ironic_client = mock.Mock()
         self.ironic_client.node.update.return_value = None
         self.ironic_client.node.vif_attach.return_value = None
         self.ironic_client.node.set_provision_state.return_value = None
 
-    @mock.patch('esiclient.utils.get_port_name', autospec=True)
-    @mock.patch('esiclient.utils.get_or_create_port', autospec=True)
-    def test_boot_node_from_url(self, mock_gocp, mock_gpn):
-        mock_gpn.return_value = self.port_name
-        mock_gocp.return_value = self.port
+    def test_boot_node_from_url(self):
         node_update = [{'path': '/instance_info/deploy_interface',
                         'value': 'ramdisk',
                         'op': 'add'},
@@ -433,19 +419,138 @@ class TestBootNodeFromURL(TestCase):
                         'op': 'add'}]
 
         utils.boot_node_from_url(
-            self.node, self.url, self.network,
-            self.ironic_client, self.neutron_client)
+            self.node_uuid, self.url, self.port_uuid, self.ironic_client)
 
-        mock_gpn.assert_called_once_with(
-            self.network.name, prefix=self.node)
-        mock_gocp.assert_called_once_with(
-            self.port_name, self.network, self.neutron_client)
         self.ironic_client.node.update.assert_called_once_with(
-            self.node, node_update
+            self.node_uuid, node_update
         )
         self.ironic_client.node.vif_attach.assert_called_once_with(
-            self.node, self.port['id']
+            self.node_uuid, self.port_uuid
         )
         self.ironic_client.node.set_provision_state.assert_called_once_with(
-            self.node, 'active'
+            self.node_uuid, 'active'
         )
+
+
+class TestCreateTrunk(TestCase):
+
+    def setUp(self):
+        super(TestCreateTrunk, self).setUp()
+
+        self.network1 = test_utils.create_mock_object({
+            "id": "network_uuid_1",
+            "name": "network1",
+            "provider_segmentation_id": 111
+        })
+        self.network2 = test_utils.create_mock_object({
+            "id": "network_uuid_2",
+            "name": "network2",
+            "provider_segmentation_id": 222
+        })
+        self.network3 = test_utils.create_mock_object({
+            "id": "network_uuid_3",
+            "name": "network3",
+            "provider_segmentation_id": 333
+        })
+        self.port = test_utils.create_mock_object({
+            "id": "port_uuid_1",
+            "network_id": "network_uuid_1",
+            "name": "trunk-network1-trunk-port",
+            "mac_address": "aa:aa:aa:aa:aa:aa",
+        })
+        self.subport2 = test_utils.create_mock_object({
+            "id": "port_uuid_2",
+            "network_id": "network_uuid_2",
+            "name": "trunk-network2-sub-port",
+            "mac_address": "bb:bb:bb:bb:bb:bb",
+        })
+        self.subport3 = test_utils.create_mock_object({
+            "id": "port_uuid_3",
+            "network_id": "network_uuid_3",
+            "name": "trunk-network3-sub-port",
+            "mac_address": "cc:cc:cc:cc:cc:cc",
+        })
+        self.trunk = test_utils.create_mock_object({
+            "id": "trunk_uuid",
+            "name": "trunk",
+            "port_id": "port_uuid_1",
+            "sub_ports": [
+                {
+                    "port_id": 'port_uuid_2',
+                    "segmentation_id": '222',
+                    "segmentation_type": 'vlan'
+                },
+                {
+                    "port_id": 'port_uuid_3',
+                    "segmentation_id": '333',
+                    "segmentation_type": 'vlan'
+                }
+            ]
+        })
+
+        self.neutron_client = mock.Mock()
+
+        def mock_find_network(network_name):
+            if network_name == "network1":
+                return self.network1
+            if network_name == "network2":
+                return self.network2
+            if network_name == "network3":
+                return self.network3
+            return None
+        self.neutron_client.find_network.\
+            side_effect = mock_find_network
+
+        def mock_create_port(name, network_id, device_owner):
+            if network_id == "network_uuid_1":
+                return self.port
+            if network_id == "network_uuid_2":
+                return self.subport2
+            if network_id == "network_uuid_3":
+                return self.subport3
+            return None
+        self.neutron_client.create_port.\
+            side_effect = mock_create_port
+
+        self.neutron_client.ports.\
+            return_value = []
+
+        self.neutron_client.create_trunk.\
+            return_value = self.trunk
+        self.neutron_client.create_port.return_value = None
+
+    def test_create_trunk(self):
+        utils.create_trunk(
+            self.neutron_client, 'trunk', self.network1,
+            ["network2", "network3"])
+
+        self.neutron_client.create_port.\
+            assert_has_calls([
+                mock.call(name="esi-trunk-network1-trunk-port",
+                          network_id="network_uuid_1",
+                          device_owner='baremetal:none'),
+                mock.call(name="esi-trunk-network2-sub-port",
+                          network_id="network_uuid_2",
+                          device_owner='baremetal:none'),
+                mock.call(name="esi-trunk-network3-sub-port",
+                          network_id="network_uuid_3",
+                          device_owner='baremetal:none')
+            ])
+        self.neutron_client.find_network.\
+            assert_has_calls([
+                mock.call("network2"),
+                mock.call("network3")
+            ])
+        self.neutron_client.create_trunk.\
+            assert_called_once_with(
+                name="trunk",
+                port_id="port_uuid_1",
+                sub_ports=[
+                    {'port_id': 'port_uuid_2',
+                     'segmentation_type': 'vlan',
+                     'segmentation_id': 222},
+                    {'port_id': 'port_uuid_3',
+                     'segmentation_type': 'vlan',
+                     'segmentation_id': 333}
+                ]
+            )

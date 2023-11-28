@@ -251,6 +251,51 @@ openstack esi switch trunk remove vlan
 
 These commands orchestrate a bare metal cluster
 
+### `openstack esi orchestrate cluster`
+
+Orchestrate a simple cluster.
+
+```
+openstack esi orchestrate cluster <config-file>
+```
+
+- `<config file>`: Configuration file; for example
+
+```
+{
+    "node_configs": [
+	{
+	    "nodes": {
+		"node_uuids": ["node1"]
+	    },
+	    "network": {
+		"network_uuid": "private-network-1",
+		"tagged_network_uuids": ["private-network-2"],
+		"fip_network_uuid": "external"
+	    },
+	    "provisioning": {
+		"provisioning_type": "image",
+		"image_uuid": "image-name",
+		"ssh_key": "/path/to/ssh/key"
+	    }
+	},
+	{
+	    "nodes": {
+		"num_nodes": "2",
+		"resource_class": "baremetal"
+	    },
+	    "network": {
+		"network_uuid": "private-network-1"
+	    },
+	    "provisioning": {
+		"provisioning_type": "image_url",
+		"url": "http://url.for/image",
+	    }
+	}
+    ]
+}
+```
+
 ### `openstack esi orchestrate openshift`
 
 Orchestrate an OpenShift cluster.
