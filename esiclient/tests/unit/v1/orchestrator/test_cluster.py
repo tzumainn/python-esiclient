@@ -399,3 +399,128 @@ class TestOrchestrate(base.TestCommand):
             fields=["uuid", "name", "resource_class"],
             provision_state='available'
         )
+
+
+class TestUndeploy(base.TestCommand):
+
+    def setUp(self):
+        super(TestUndeploy, self).setUp()
+        self.cmd = cluster.Undeploy(self.app, None)
+
+        self.port1 = utils.create_mock_object({
+            "id": "port_uuid_1",
+            "name": "esi-node2-network2",
+            "network_id": "network_uuid_1",
+        })
+        self.port2 = utils.create_mock_object({
+            "id": "port_uuid_2",
+            "name": "esi-node3-network2",
+            "network_id": "network_uuid_2",
+        })
+        self.network1 = utils.create_mock_object({
+            "id": "network_uuid_1",
+            "name": "network1",
+        })
+        self.network2 = utils.create_mock_object({
+            "id": "network_uuid_2",
+            "name": "network2",
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid_1",
+            "name": "trunk",
+        })
+
+        def mock_find_network(name):
+            if name == "network1":
+                return self.network1
+            if name == "network2":
+                return self.network2
+            return None
+        self.app.client_manager.network.find_network.\
+            side_effect = mock_find_network
+
+        def mock_find_port(name):
+            if name == "esi-node2-network2":
+                return self.port1
+            if name == "esi-node3-network2":
+                return self.port2
+            return None
+        self.app.client_manager.network.find_port.\
+            side_effect = mock_find_port
+        self.app.client_manager.network.delete_port.\
+            return_value = None
+
+        self.app.client_manager.network.find_trunk.return_value = \
+            self.trunk
+
+        self.app.client_manager.baremetal.node.set_provision_state.\
+            return_value = None
+
+    @mock.patch(
+        'esiclient.utils.delete_trunk',
+        autospec=True)
+    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('json.load', autospec=True)
+    def test_take_action(self, mock_load, mock_sleep, mock_dt):
+        mock_load.return_value = {
+            "node_configs": [
+                {
+                    "nodes": {
+                        "node_uuids": ["node1"]
+                    },
+                    "network": {
+                        "network_uuid": "network1",
+                        "tagged_network_uuids": ["network2"],
+                        "fip_network_uuid": "external_network"
+                    },
+                    "provisioning": {
+                        "provisioning_type": "image",
+                        "image_uuid": "image_uuid",
+                        "ssh_key": "/path/to/ssh/key"
+                    }
+                },
+                {
+                    "nodes": {
+                        "node_uuids": ["node2", "node3"]
+                    },
+                    "network": {
+                        "network_uuid": "network2"
+                    },
+                    "provisioning": {
+                        "provisioning_type": "image_url",
+                        "url": "https://image.url"
+                    }
+                }
+            ]
+        }
+
+        arglist = ['config.json']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        with patch("builtins.open"):
+            self.cmd.take_action(parsed_args)
+
+        self.app.client_manager.network.find_network.assert_has_calls([
+            call('network1'),
+            call('network2')
+        ])
+        self.app.client_manager.baremetal.node.set_provision_state.\
+            assert_has_calls([
+                call('node1', 'deleted'),
+                call('node2', 'deleted'),
+                call('node3', 'deleted')
+            ])
+        self.app.client_manager.network.find_trunk.\
+            assert_called_once_with('esi-node1-trunk')
+        mock_dt.assert_called_once_with(
+            self.app.client_manager.network, self.trunk)
+        self.app.client_manager.network.find_port.assert_has_calls([
+            call('esi-node2-network2'),
+            call('esi-node3-network2')
+        ])
+        self.app.client_manager.network.delete_port.assert_has_calls([
+            call('port_uuid_1'),
+            call('port_uuid_2')
+        ])

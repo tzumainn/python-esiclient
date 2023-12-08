@@ -526,3 +526,161 @@ class TestOrchestrate(base.TestCommand):
                 openshift.OrchestrationException,
                 'Please export PULL_SECRET',
                 self.cmd.take_action, parsed_args)
+
+
+class TestUndeploy(base.TestCommand):
+
+    def setUp(self):
+        super(TestUndeploy, self).setUp()
+        self.cmd = openshift.Undeploy(self.app, None)
+
+        self.provisioning_port1 = utils.create_mock_object({
+            "id": "provisioning_port_uuid_1",
+            "network_id": "network_uuid_2",
+        })
+        self.provisioning_port2 = utils.create_mock_object({
+            "id": "provisioning_port_uuid_2",
+            "network_id": "network_uuid_2",
+        })
+        self.provisioning_port3 = utils.create_mock_object({
+            "id": "provisioning_port_uuid_3",
+            "network_id": "network_uuid_2",
+        })
+        self.private_port1 = utils.create_mock_object({
+            "id": "private_port_uuid_1",
+            "network_id": "network_uuid_1",
+        })
+        self.private_port2 = utils.create_mock_object({
+            "id": "private_port_uuid_2",
+            "network_id": "network_uuid_1",
+        })
+        self.private_port3 = utils.create_mock_object({
+            "id": "private_port_uuid_3",
+            "network_id": "network_uuid_1",
+        })
+
+        def mock_find_port(uuid):
+            if uuid == "esi-node1-provisioning_network":
+                return self.provisioning_port1
+            if uuid == "esi-node2-provisioning_network":
+                return self.provisioning_port2
+            if uuid == "esi-node3-provisioning_network":
+                return self.provisioning_port3
+            if uuid == "esi-node1-private_network":
+                return self.private_port1
+            if uuid == "esi-node2-private_network":
+                return self.private_port2
+            if uuid == "esi-node3-private_network":
+                return self.private_port3
+            return None
+        self.app.client_manager.network.find_port.\
+            side_effect = mock_find_port
+
+        self.api_port = utils.create_mock_object({
+            "id": "api_port_uuid_1",
+            "network_id": "network_uuid_1",
+        })
+        self.apps_port = utils.create_mock_object({
+            "id": "apps_port_uuid_1",
+            "network_id": "network_uuid_1",
+        })
+
+        def mock_ports(fixed_ips=None):
+            if fixed_ips == "ip_address=1.1.1.1":
+                return [self.api_port]
+            if fixed_ips == "ip_address=2.2.2.2":
+                return [self.apps_port]
+            return []
+        self.app.client_manager.network.ports.\
+            side_effect = mock_ports
+        self.app.client_manager.network.delete_port.\
+            return_value = None
+
+        self.api_fip = utils.create_mock_object({
+            "id": "fip_uuid_1",
+            "floating_ip_address": "3.3.3.3"
+        })
+        self.apps_fip = utils.create_mock_object({
+            "id": "fip_uuid_2",
+            "floating_ip_address": "4.4.4.4"
+        })
+
+        def mock_ips(fixed_ip_address=None):
+            if fixed_ip_address == "1.1.1.1":
+                return [self.api_fip]
+            if fixed_ip_address == "2.2.2.2":
+                return [self.apps_fip]
+            return []
+        self.app.client_manager.network.ips.\
+            side_effect = mock_ips
+        self.app.client_manager.network.delete_ip.\
+            return_value = None
+
+        self.app.client_manager.baremetal.node.set_provision_state.\
+            return_value = None
+
+    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('json.loads', autospec=True)
+    @mock.patch('json.load', autospec=True)
+    @mock.patch.dict(os.environ, {"PULL_SECRET": "pull_secret_file",
+                                  "API_TOKEN": "api-token"})
+    def test_take_action(self, mock_load, mock_loads, mock_sleep):
+        mock_load.return_value = {
+            "cluster_name": "test_cluster",
+            "api_vip": "1.1.1.1",
+            "ingress_vip": "2.2.2.2",
+            "openshift_version": "1",
+            "base_dns_domain": "foo.bar",
+            "ssh_public_key": "ssh-public-key",
+            "external_network_name": "external_network",
+            "provisioning_network_name": "provisioning_network",
+            "private_network_name": "private_network",
+            "private_subnet_name": "private_subnet",
+            "nodes": ["node1", "node2", "node3"]
+        }
+        mock_loads.return_value = 'pull_secret_value'
+
+        arglist = ['config.json']
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        with patch("builtins.open"):
+            self.cmd.take_action(parsed_args)
+
+        self.app.client_manager.network.ports.assert_has_calls([
+            call(fixed_ips='ip_address=1.1.1.1'),
+            call(fixed_ips='ip_address=2.2.2.2')
+        ])
+        self.app.client_manager.network.ips.assert_has_calls([
+            call(fixed_ip_address='1.1.1.1'),
+            call(fixed_ip_address='2.2.2.2')
+        ])
+        self.app.client_manager.network.delete_ip.assert_has_calls([
+            call('fip_uuid_1'),
+            call('fip_uuid_2')
+        ])
+        self.app.client_manager.network.delete_port.assert_has_calls([
+            call('api_port_uuid_1'),
+            call('apps_port_uuid_1'),
+            call('provisioning_port_uuid_1'),
+            call('private_port_uuid_1'),
+            call('provisioning_port_uuid_2'),
+            call('private_port_uuid_2'),
+            call('provisioning_port_uuid_3'),
+            call('private_port_uuid_3')
+        ])
+        self.app.client_manager.baremetal.node.set_provision_state.\
+            assert_has_calls([
+                call('node1', 'deleted'),
+                call('node2', 'deleted'),
+                call('node3', 'deleted')
+            ])
+        self.app.client_manager.network.find_port.assert_has_calls([
+            call('esi-node1-provisioning_network'),
+            call('esi-node1-private_network'),
+            call('esi-node2-provisioning_network'),
+            call('esi-node2-private_network'),
+            call('esi-node3-provisioning_network'),
+            call('esi-node3-private_network')
+        ])

@@ -249,10 +249,4 @@ class Delete(command.Command):
             raise exceptions.CommandError(
                 "ERROR: no trunk named {0}".format(parsed_args.name))
 
-        port_ids_to_delete = [sub_port['port_id']
-                              for sub_port in trunk.sub_ports]
-        port_ids_to_delete.append(trunk.port_id)
-
-        neutron_client.delete_trunk(trunk.id)
-        for port_id in port_ids_to_delete:
-            neutron_client.delete_port(port_id)
+        utils.delete_trunk(neutron_client, trunk)
