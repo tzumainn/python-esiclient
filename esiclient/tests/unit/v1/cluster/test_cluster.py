@@ -17,7 +17,84 @@ from mock import patch
 
 from esiclient.tests.unit import base
 from esiclient.tests.unit import utils
-from esiclient.v1.orchestrator import cluster
+from esiclient.v1.cluster import cluster
+
+
+class TestList(base.TestCommand):
+
+    def setUp(self):
+        super(TestList, self).setUp()
+        self.cmd = cluster.List(self.app, None)
+
+        self.node1 = utils.create_mock_object({
+            "uuid": "node_uuid_1",
+            "name": "node1",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-1",
+                "esi_trunk_uuid": "trunk-uuid-1",
+                "esi_fip_uuid": "fip-uuid-1"
+            }
+        })
+        self.node2 = utils.create_mock_object({
+            "uuid": "node_uuid_2",
+            "name": "node2",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-1",
+                "esi_port_uuid": "port-uuid-2"
+            }
+        })
+        self.node3 = utils.create_mock_object({
+            "uuid": "node_uuid_3",
+            "name": "node3",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-1",
+                "esi_port_uuid": "port-uuid-3"
+            }
+        })
+        self.node4 = utils.create_mock_object({
+            "uuid": "node_uuid_4",
+            "name": "node4",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-2",
+                "esi_trunk_uuid": "trunk-uuid-2",
+                "esi_fip_uuid": "fip-uuid-2"
+            }
+        })
+        self.node5 = utils.create_mock_object({
+            "uuid": "node_uuid_5",
+            "name": "node5",
+            "extra": {}
+        })
+        self.trunk = utils.create_mock_object({
+            "id": "trunk_uuid_1",
+            "name": "trunk",
+        })
+
+        self.app.client_manager.baremetal.node.list.return_value = [
+            self.node1, self.node2, self.node3, self.node4]
+
+    def test_take_action(self):
+        arglist = []
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+        expected = (
+            ['Cluster', 'Node', 'Associated'],
+            [['cluster-uuid-1', 'node1\nnode2\nnode3',
+              "{'esi_trunk_uuid': 'trunk-uuid-1', "
+              "'esi_fip_uuid': 'fip-uuid-1'}\n"
+              "{'esi_port_uuid': 'port-uuid-2'}\n"
+              "{'esi_port_uuid': 'port-uuid-3'}"],
+             ['cluster-uuid-2', 'node4',
+              "{'esi_trunk_uuid': 'trunk-uuid-2', "
+              "'esi_fip_uuid': 'fip-uuid-2'}"]]
+        )
+        self.assertEqual(expected, results)
+        self.app.client_manager.baremetal.node.list.assert_called_once_with(
+            fields=["uuid", "name", "extra"],
+        )
 
 
 class TestOrchestrate(base.TestCommand):
@@ -67,6 +144,9 @@ class TestOrchestrate(base.TestCommand):
             "id": "network_uuid_3",
             "name": "external_network",
         })
+        self.fip = utils.create_mock_object({
+            "id": "fip_uuid_1",
+        })
         self.image = utils.create_mock_object({
             "id": "image_uuid_1",
             "name": "image",
@@ -108,9 +188,11 @@ class TestOrchestrate(base.TestCommand):
     @mock.patch(
         'esiclient.utils.create_trunk',
         autospec=True)
+    @mock.patch('oslo_utils.uuidutils.generate_uuid', autospec=True)
     @mock.patch('json.load', autospec=True)
-    def test_take_action(self, mock_load, mock_ct, mock_gocp, mock_pnwi,
-                         mock_bnfu, mock_goapfi, mock_gfnifp, mock_gfi):
+    def test_take_action(self, mock_load, mock_uuid, mock_ct, mock_gocp,
+                         mock_pnwi, mock_bnfu, mock_goapfi, mock_gfnifp,
+                         mock_gfi):
         mock_load.return_value = {
             "node_configs": [
                 {
@@ -143,6 +225,8 @@ class TestOrchestrate(base.TestCommand):
                 }
             ]
         }
+        mock_goapfi.return_value = self.fip
+        mock_uuid.return_value = 'cluster-uuid'
         mock_ct.return_value = None, self.port1
         mock_gocp.side_effect = [self.port2, self.port3]
         mock_gfnifp.return_value = [], [], []
@@ -160,6 +244,7 @@ class TestOrchestrate(base.TestCommand):
             fields=["uuid", "name", "resource_class"],
             provision_state='available'
         )
+        mock_uuid.assert_called_once
         self.app.client_manager.network.find_network.assert_has_calls([
             call('private_network_1'), call('external_network')
         ])
@@ -191,6 +276,22 @@ class TestOrchestrate(base.TestCommand):
         )
         assert mock_gfnifp.call_count == 3
         assert mock_gfi.call_count == 3
+        self.app.client_manager.baremetal.node.update.assert_has_calls([
+            call('node_uuid_1', [{'path': '/extra/esi_cluster_uuid',
+                                  'value': 'cluster-uuid', 'op': 'add'},
+                                 {'path': '/extra/esi_port_uuid',
+                                  'value': 'port_uuid_1', 'op': 'add'},
+                                 {'path': '/extra/esi_fip_uuid',
+                                  'value': 'fip_uuid_1', 'op': 'add'}]),
+            call('node_uuid_2', [{'path': '/extra/esi_cluster_uuid',
+                                  'value': 'cluster-uuid', 'op': 'add'},
+                                 {'path': '/extra/esi_port_uuid', 'value':
+                                  'port_uuid_2', 'op': 'add'}]),
+            call('node_uuid_3', [{'path': '/extra/esi_cluster_uuid',
+                                  'value': 'cluster-uuid', 'op': 'add'},
+                                 {'path': '/extra/esi_port_uuid',
+                                  'value': 'port_uuid_3', 'op': 'add'}])
+        ])
 
     @mock.patch('json.load', autospec=True)
     def test_take_action_insufficient_nodes(self, mock_load):
@@ -407,120 +508,98 @@ class TestUndeploy(base.TestCommand):
         super(TestUndeploy, self).setUp()
         self.cmd = cluster.Undeploy(self.app, None)
 
-        self.port1 = utils.create_mock_object({
-            "id": "port_uuid_1",
-            "name": "esi-node2-network2",
-            "network_id": "network_uuid_1",
+        self.node1 = utils.create_mock_object({
+            "uuid": "node_uuid_1",
+            "name": "node1",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-1",
+                "esi_trunk_uuid": "trunk-uuid-1",
+                "esi_fip_uuid": "fip-uuid-1"
+            }
         })
-        self.port2 = utils.create_mock_object({
-            "id": "port_uuid_2",
-            "name": "esi-node3-network2",
-            "network_id": "network_uuid_2",
+        self.node2 = utils.create_mock_object({
+            "uuid": "node_uuid_2",
+            "name": "node2",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-1",
+                "esi_port_uuid": "port-uuid-2"
+            }
         })
-        self.network1 = utils.create_mock_object({
-            "id": "network_uuid_1",
-            "name": "network1",
+        self.node3 = utils.create_mock_object({
+            "uuid": "node_uuid_3",
+            "name": "node3",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-1",
+                "esi_port_uuid": "port-uuid-3"
+            }
         })
-        self.network2 = utils.create_mock_object({
-            "id": "network_uuid_2",
-            "name": "network2",
+        self.node4 = utils.create_mock_object({
+            "uuid": "node_uuid_4",
+            "name": "node4",
+            "extra": {
+                "esi_cluster_uuid": "cluster-uuid-2",
+                "esi_trunk_uuid": "trunk-uuid-2",
+                "esi_fip_uuid": "fip-uuid-2"
+            }
+        })
+        self.node5 = utils.create_mock_object({
+            "uuid": "node_uuid_5",
+            "name": "node5",
+            "extra": {}
         })
         self.trunk = utils.create_mock_object({
             "id": "trunk_uuid_1",
             "name": "trunk",
         })
 
-        def mock_find_network(name):
-            if name == "network1":
-                return self.network1
-            if name == "network2":
-                return self.network2
-            return None
-        self.app.client_manager.network.find_network.\
-            side_effect = mock_find_network
-
-        def mock_find_port(name):
-            if name == "esi-node2-network2":
-                return self.port1
-            if name == "esi-node3-network2":
-                return self.port2
-            return None
-        self.app.client_manager.network.find_port.\
-            side_effect = mock_find_port
-        self.app.client_manager.network.delete_port.\
-            return_value = None
-
+        self.app.client_manager.baremetal.node.list.return_value = [
+            self.node1, self.node2, self.node3, self.node4]
         self.app.client_manager.network.find_trunk.return_value = \
             self.trunk
-
-        self.app.client_manager.baremetal.node.set_provision_state.\
-            return_value = None
 
     @mock.patch(
         'esiclient.utils.delete_trunk',
         autospec=True)
-    @mock.patch('time.sleep', autospec=True)
-    @mock.patch('json.load', autospec=True)
-    def test_take_action(self, mock_load, mock_sleep, mock_dt):
-        mock_load.return_value = {
-            "node_configs": [
-                {
-                    "nodes": {
-                        "node_uuids": ["node1"]
-                    },
-                    "network": {
-                        "network_uuid": "network1",
-                        "tagged_network_uuids": ["network2"],
-                        "fip_network_uuid": "external_network"
-                    },
-                    "provisioning": {
-                        "provisioning_type": "image",
-                        "image_uuid": "image_uuid",
-                        "ssh_key": "/path/to/ssh/key"
-                    }
-                },
-                {
-                    "nodes": {
-                        "node_uuids": ["node2", "node3"]
-                    },
-                    "network": {
-                        "network_uuid": "network2"
-                    },
-                    "provisioning": {
-                        "provisioning_type": "image_url",
-                        "url": "https://image.url"
-                    }
-                }
-            ]
-        }
-
-        arglist = ['config.json']
+    def test_take_action(self, mock_dt):
+        arglist = ['cluster-uuid-1']
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
 
-        with patch("builtins.open"):
-            self.cmd.take_action(parsed_args)
+        self.cmd.take_action(parsed_args)
 
-        self.app.client_manager.network.find_network.assert_has_calls([
-            call('network1'),
-            call('network2')
-        ])
+        self.app.client_manager.baremetal.node.list.assert_called_once_with(
+            fields=["uuid", "name", "extra"],
+        )
         self.app.client_manager.baremetal.node.set_provision_state.\
             assert_has_calls([
-                call('node1', 'deleted'),
-                call('node2', 'deleted'),
-                call('node3', 'deleted')
+                call('node_uuid_1', 'deleted'),
+                call('node_uuid_2', 'deleted'),
+                call('node_uuid_3', 'deleted')
             ])
         self.app.client_manager.network.find_trunk.\
-            assert_called_once_with('esi-node1-trunk')
+            assert_called_once_with('trunk-uuid-1')
         mock_dt.assert_called_once_with(
             self.app.client_manager.network, self.trunk)
-        self.app.client_manager.network.find_port.assert_has_calls([
-            call('esi-node2-network2'),
-            call('esi-node3-network2')
-        ])
         self.app.client_manager.network.delete_port.assert_has_calls([
-            call('port_uuid_1'),
-            call('port_uuid_2')
+            call('port-uuid-2'),
+            call('port-uuid-3')
+        ])
+        self.app.client_manager.network.delete_ip.assert_called_once_with(
+            'fip-uuid-1'
+        )
+        self.app.client_manager.baremetal.node.update.assert_has_calls([
+            call('node_uuid_1', [
+                {'path': '/extra/esi_cluster_uuid', 'op': 'remove'},
+                {'path': '/extra/esi_trunk_uuid', 'op': 'remove'},
+                {'path': '/extra/esi_fip_uuid', 'op': 'remove'}
+            ]),
+            call('node_uuid_2', [
+                {'path': '/extra/esi_cluster_uuid', 'op': 'remove'},
+                {'path': '/extra/esi_port_uuid', 'op': 'remove'}
+            ]),
+            call('node_uuid_3', [
+                {'path': '/extra/esi_cluster_uuid', 'op': 'remove'},
+                {'path': '/extra/esi_port_uuid', 'op': 'remove'}
+            ])
         ])

@@ -13,16 +13,68 @@
 import concurrent.futures
 import json
 import logging
-import time
 
 from osc_lib.command import command
 from osc_lib.i18n import _
 
+from oslo_utils import uuidutils
+
 from esiclient import utils
+
+
+ESI_CLUSTER_UUID = 'esi_cluster_uuid'
+ESI_TRUNK_UUID = 'esi_trunk_uuid'
+ESI_PORT_UUID = 'esi_port_uuid'
+ESI_FIP_UUID = 'esi_fip_uuid'
 
 
 class ESIOrchestrationException(Exception):
     pass
+
+
+class List(command.Lister):
+    """List ESI clusters"""
+
+    log = logging.getLogger(__name__ + ".List")
+
+    def get_parser(self, prog_name):
+        parser = super(List, self).get_parser(prog_name)
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+
+        ironic_client = self.app.client_manager.baremetal
+
+        nodes = ironic_client.node.list(fields=['uuid', 'name', 'extra'])
+
+        cluster_dict = {}
+        for node in nodes:
+            extra = node.extra
+            # only look at nodes that specify a cluster UUID
+            if ESI_CLUSTER_UUID in extra:
+                cluster_uuid = extra[ESI_CLUSTER_UUID]
+                esi_extra = {}
+                for key in extra:
+                    # only display 'extra' attributes set by ESI
+                    if key.startswith('esi') and key != ESI_CLUSTER_UUID:
+                        esi_extra[key] = extra[key]
+                if cluster_uuid not in cluster_dict:
+                    cluster_dict[cluster_uuid] = {}
+                cluster_dict[cluster_uuid][node.name] = esi_extra
+
+        cluster_info = []
+        for cluster_uuid in cluster_dict:
+            node_info = []
+            extra_info = []
+            for node in cluster_dict[cluster_uuid]:
+                node_info.append(node)
+                extra_info.append(str(cluster_dict[cluster_uuid][node]))
+            cluster_info.append([cluster_uuid,
+                                 "\n".join(node_info),
+                                 "\n".join(extra_info)])
+
+        return ["Cluster", "Node", "Associated"], cluster_info
 
 
 class Orchestrate(command.Lister):
@@ -41,6 +93,16 @@ class Orchestrate(command.Lister):
             help=_("File describing the cluster configuration"))
 
         return parser
+
+    def set_node_cluster_info(self, node, cluster_dict):
+        ironic_client = self.app.client_manager.baremetal
+        node_update = []
+        for key, value in cluster_dict.items():
+            node_update.append(
+                {'path': "/extra/%s" % key,
+                 'value': value,
+                 'op': 'add'})
+        ironic_client.node.update(node.uuid, node_update)
 
     def assign_nodes(self, cluster_config):
         print("ASSIGNING NODES")
@@ -122,20 +184,28 @@ class Orchestrate(command.Lister):
             port = neutron_client.find_port(port.id)
             print("* Using trunk port %s" % trunk_name)
         else:
+            trunk = None
             port_name = "esi-%s-%s" % (node.name, network.name)
             port = utils.get_or_create_port(port_name, network, neutron_client)
             print("* Using port %s" % port_name)
-        return port
+        return port, trunk
 
-    def provision_node(self, node, provisioning_type, node_config):
+    def provision_node(self, node, provisioning_type, node_config,
+                       cluster_uuid):
         glance_client = self.app.client_manager.image
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
 
+        cluster_dict = {ESI_CLUSTER_UUID: cluster_uuid}
+
         network_config = node_config['network']
 
         # create network port
-        port = self.get_port_from_network_config(node, network_config)
+        port, trunk = self.get_port_from_network_config(node, network_config)
+        if trunk:
+            cluster_dict[ESI_TRUNK_UUID] = trunk.id
+        else:
+            cluster_dict[ESI_PORT_UUID] = port.id
 
         # provision
         if provisioning_type == 'image':
@@ -164,8 +234,11 @@ class Orchestrate(command.Lister):
                 node.name, port.name))
             fip_network = neutron_client.find_network(
                 network_config['fip_network_uuid'])
-            utils.get_or_assign_port_floating_ip(
+            fip = utils.get_or_assign_port_floating_ip(
                 port, fip_network, neutron_client)
+            cluster_dict[ESI_FIP_UUID] = fip.id
+
+        self.set_node_cluster_info(node, cluster_dict)
 
         return node, port
 
@@ -181,6 +254,7 @@ class Orchestrate(command.Lister):
         print("")
 
         print("PROVISIONING NODES")
+        cluster_uuid = uuidutils.generate_uuid()
         node_configs = cluster_config['node_configs']
         futures = []
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -194,7 +268,7 @@ class Orchestrate(command.Lister):
                 for node in nodes:
                     future = executor.submit(
                         self.provision_node, node, provisioning_type,
-                        node_config)
+                        node_config, cluster_uuid)
                     futures.append(future)
         print("NODE PROVISIONING COMPLETE")
 
@@ -234,67 +308,65 @@ class Undeploy(command.Command):
         parser = super(Undeploy, self).get_parser(prog_name)
 
         parser.add_argument(
-            "cluster_config_file",
-            metavar="<cluster_config_file>",
-            help=_("File describing the cluster configuration"))
+            "cluster_uuid",
+            metavar="<cluster_uuid>",
+            help=_("Cluster UUID"))
 
         return parser
 
     def take_action(self, parsed_args):
         self.log.debug("take_action(%s)", parsed_args)
 
-        cluster_config_file = parsed_args.cluster_config_file
-        with open(cluster_config_file) as f:
-            cluster_config = json.load(f)
+        cluster_uuid = parsed_args.cluster_uuid
 
-        print("STARTING UNDEPLOY")
+        print("STARTING UNDEPLOY for CLUSTER %s" % cluster_uuid)
 
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
-        node_configs = cluster_config['node_configs']
 
-        uuid_node_configs = [node_config for node_config in node_configs
-                             if 'node_uuids' in node_config['nodes']]
-        count = 0
-        for node_config in uuid_node_configs:
-            count += 1
-            print("* undeploying %s of %s node configs" % (
-                count, len(uuid_node_configs)))
-            node_uuids = node_config['nodes']['node_uuids']
-            network_config = node_config['network']
-            network_uuid = network_config.get('network_uuid', None)
-            network = neutron_client.find_network(network_uuid)
-            for node in node_uuids:
-                print("   * %s" % node)
-                ironic_client.node.set_provision_state(node, 'deleted')
-                print("   * waiting for nodes to start undeploy before"
-                      " deleting ports")
-                time.sleep(15)
-                if 'tagged_network_uuids' in network_config:
-                    trunk_name = "esi-%s-trunk" % node
-                    trunk = neutron_client.find_trunk(trunk_name)
+        nodes = ironic_client.node.list(fields=['uuid', 'name', 'extra'])
+        cluster_found = False
+        for node in nodes:
+            extra = node.extra
+            if extra.get(ESI_CLUSTER_UUID, None) == cluster_uuid:
+                cluster_found = True
+                print("* Node %s" % node.name)
+                node_extra_update = []
+                node_extra_update.append(
+                    {'path': "/extra/esi_cluster_uuid",
+                     'op': 'remove'})
+
+                if ESI_PORT_UUID in extra:
+                    port_uuid = extra[ESI_PORT_UUID]
+                    print("   * deleting port %s" % port_uuid)
+                    neutron_client.delete_port(port_uuid)
+                    node_extra_update.append(
+                        {'path': "/extra/esi_port_uuid",
+                         'op': 'remove'})
+                if ESI_TRUNK_UUID in extra:
+                    trunk_uuid = extra[ESI_TRUNK_UUID]
+                    print("   * deleting trunk %s" % trunk_uuid)
+                    trunk = neutron_client.find_trunk(trunk_uuid)
                     if trunk:
-                        print("   * %s" % trunk_name)
                         utils.delete_trunk(neutron_client, trunk)
-                else:
-                    port_name = "esi-%s-%s" % (node, network.name)
-                    port = neutron_client.find_port(port_name)
-                    if port:
-                        print("   * %s" % port_name)
-                        neutron_client.delete_port(port.id)
+                    node_extra_update.append(
+                        {'path': "/extra/esi_trunk_uuid",
+                         'op': 'remove'})
+                if ESI_FIP_UUID in extra:
+                    fip_uuid = extra[ESI_FIP_UUID]
+                    print("   * deleting fip %s" % fip_uuid)
+                    neutron_client.delete_ip(fip_uuid)
+                    node_extra_update.append(
+                        {'path': "/extra/esi_fip_uuid",
+                         'op': 'remove'})
+                ironic_client.node.update(node.uuid, node_extra_update)
+                ironic_client.node.set_provision_state(node.uuid, 'deleted')
 
-        non_uuid_node_configs = [node_config for node_config in node_configs
-                                 if 'node_uuids' not in node_config['nodes']]
-        if len(non_uuid_node_configs) > 0:
-            print("* %s node configs were skipped, as they do not"
-                  " specify specific nodes" % len(non_uuid_node_configs))
-            print("   * these nodes and ports will have to be removed"
-                  " manually")
-            print("       openstack baremetal node undeploy <node>")
-            print("       openstack port delete <port>")
-
-        print("UNDEPLOY COMPLETE")
-        print("-----------------")
-        print("* node cleaning will take a while to complete")
-        print("* run `openstack baremetal node list` to see if"
-              " they are in the `available` state")
+        if cluster_found:
+            print("UNDEPLOY COMPLETE")
+            print("-----------------")
+            print("* node cleaning will take a while to complete")
+            print("* run `openstack baremetal node list` to see if"
+                  " they are in the `available` state")
+        else:
+            print("No cluster with UUID %s found" % cluster_uuid)
