@@ -19,7 +19,7 @@ from unittest import TestCase
 
 from esiclient.tests.unit import base
 from esiclient.tests.unit import utils
-from esiclient.v1.orchestrator import openshift
+from esiclient.v1.cluster import openshift
 
 
 class MockResponse:
@@ -101,7 +101,7 @@ class TestWaitForNodes(TestCase):
 
     @mock.patch('time.sleep', autospec=True)
     @mock.patch(
-        'esiclient.v1.orchestrator.openshift.call_assisted_installer_api',
+        'esiclient.v1.cluster.openshift.call_assisted_installer_api',
         autospec=True)
     def test_wait_for_nodes(self, mock_caia, mock_sleep):
         first_response = []
@@ -318,10 +318,10 @@ class TestOrchestrate(base.TestCommand):
         'esiclient.utils.boot_node_from_url',
         autospec=True)
     @mock.patch(
-        'esiclient.v1.orchestrator.openshift.wait_for_nodes',
+        'esiclient.v1.cluster.openshift.wait_for_nodes',
         autospec=True)
     @mock.patch(
-        'esiclient.v1.orchestrator.openshift.call_assisted_installer_api',
+        'esiclient.v1.cluster.openshift.call_assisted_installer_api',
         autospec=True)
     @mock.patch('time.sleep', autospec=True)
     @mock.patch('json.loads', autospec=True)

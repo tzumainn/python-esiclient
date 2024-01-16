@@ -247,16 +247,16 @@ openstack esi switch trunk remove vlan
 - `switchport`: Switchport
 - `vlan`: VLAN
 
-## `openstack esi orchestrate <command>`
+## `openstack esi cluster <command>`
 
-These commands orchestrate a bare metal cluster
+These commands orchestrate and undeploy simple bare metal clusters.
 
-### `openstack esi orchestrate cluster`
+### `openstack esi cluster orchestrate`
 
 Orchestrate a simple cluster.
 
 ```
-openstack esi orchestrate cluster <config-file>
+openstack esi cluster orchestrate <config-file>
 ```
 
 - `<config file>`: Configuration file; for example
@@ -296,12 +296,34 @@ openstack esi orchestrate cluster <config-file>
 }
 ```
 
-### `openstack esi orchestrate openshift`
+### `openstack esi cluster list`
+
+List clusters deployed through ESI, along with their associated resources.
+
+```
+openstack esi cluster list
+```
+
+### `openstack esi cluster undeploy`
+
+Undeploy a cluster deployed through ESI.
+
+```
+openstack esi cluster undeploy <cluster-uuid>
+```
+
+- `<cluster uuid>`: Cluster UUID; can be found by running `openstack esi cluster list`
+
+## `openstack esi openshift <command>`
+
+These commands orchestrate and undeploy OpenShift clusters.
+
+### `openstack esi openshift orchestrate`
 
 Orchestrate an OpenShift cluster.
 
 ```
-openstack esi orchestrate openshift <config-file>
+openstack esi openshift orchestrate <config-file>
 ```
 
 - `<config file>`: Configuration file; for example
@@ -321,3 +343,13 @@ openstack esi orchestrate openshift <config-file>
     "nodes": ["node1", "node2", "node3"]
 }
 ```
+
+### `openstack esi openshift undeploy`
+
+Undeploy an OpenShift cluster orchestrated through ESI.
+
+```
+openstack esi openshift undeploy <config-file>
+```
+
+- `<config file>`: Configuration file used to orchestrate OpenShift cluster
