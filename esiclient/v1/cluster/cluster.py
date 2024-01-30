@@ -19,17 +19,8 @@ from osc_lib.i18n import _
 
 from oslo_utils import uuidutils
 
-from esiclient import utils
-
-
-ESI_CLUSTER_UUID = 'esi_cluster_uuid'
-ESI_TRUNK_UUID = 'esi_trunk_uuid'
-ESI_PORT_UUID = 'esi_port_uuid'
-ESI_FIP_UUID = 'esi_fip_uuid'
-
-
-class ESIOrchestrationException(Exception):
-    pass
+from esiclient import utils as esi_utils
+from esiclient.v1.cluster import utils
 
 
 class List(command.Lister):
@@ -52,12 +43,12 @@ class List(command.Lister):
         for node in nodes:
             extra = node.extra
             # only look at nodes that specify a cluster UUID
-            if ESI_CLUSTER_UUID in extra:
-                cluster_uuid = extra[ESI_CLUSTER_UUID]
+            if utils.ESI_CLUSTER_UUID in extra:
+                cluster_uuid = extra[utils.ESI_CLUSTER_UUID]
                 esi_extra = {}
                 for key in extra:
                     # only display 'extra' attributes set by ESI
-                    if key.startswith('esi') and key != ESI_CLUSTER_UUID:
+                    if key.startswith('esi') and key != utils.ESI_CLUSTER_UUID:
                         esi_extra[key] = extra[key]
                 if cluster_uuid not in cluster_dict:
                     cluster_dict[cluster_uuid] = {}
@@ -94,16 +85,6 @@ class Orchestrate(command.Lister):
 
         return parser
 
-    def set_node_cluster_info(self, node, cluster_dict):
-        ironic_client = self.app.client_manager.baremetal
-        node_update = []
-        for key, value in cluster_dict.items():
-            node_update.append(
-                {'path': "/extra/%s" % key,
-                 'value': value,
-                 'op': 'add'})
-        ironic_client.node.update(node.uuid, node_update)
-
     def assign_nodes(self, cluster_config):
         print("ASSIGNING NODES")
         ironic_client = self.app.client_manager.baremetal
@@ -133,7 +114,7 @@ class Orchestrate(command.Lister):
                      if node.uuid == node_uuid or node.name == node_uuid),
                     None)
                 if not node:
-                    raise ESIOrchestrationException(
+                    raise utils.ESIOrchestrationException(
                         "%s is not an available node" % node_uuid)
                 nodes.append(node)
                 available_nodes.remove(node)
@@ -156,7 +137,7 @@ class Orchestrate(command.Lister):
                     nodes.append(node)
                     count += 1
             if count < num_nodes:
-                raise ESIOrchestrationException(
+                raise utils.ESIOrchestrationException(
                     "Cannot find %s free %s nodes" % (
                         num_nodes, resource_class))
             for node in nodes:
@@ -170,7 +151,7 @@ class Orchestrate(command.Lister):
     def get_port_from_network_config(self, node, network_config):
         network_uuid = network_config.get('network_uuid', None)
         if not network_uuid:
-            raise ESIOrchestrationException("Must specify a network")
+            raise utils.ESIOrchestrationException("Must specify a network")
 
         neutron_client = self.app.client_manager.network
         network = neutron_client.find_network(network_uuid)
@@ -178,7 +159,7 @@ class Orchestrate(command.Lister):
         if 'tagged_network_uuids' in network_config:
             tagged_networks = network_config['tagged_network_uuids']
             trunk_name = "esi-%s-trunk" % node.name
-            trunk, port = utils.create_trunk(
+            trunk, port = esi_utils.create_trunk(
                 neutron_client, trunk_name, network, tagged_networks)
             # need to refresh port information after trunk is created
             port = neutron_client.find_port(port.id)
@@ -186,7 +167,8 @@ class Orchestrate(command.Lister):
         else:
             trunk = None
             port_name = "esi-%s-%s" % (node.name, network.name)
-            port = utils.get_or_create_port(port_name, network, neutron_client)
+            port = esi_utils.get_or_create_port(
+                port_name, network, neutron_client)
             print("* Using port %s" % port_name)
         return port, trunk
 
@@ -196,16 +178,16 @@ class Orchestrate(command.Lister):
         ironic_client = self.app.client_manager.baremetal
         neutron_client = self.app.client_manager.network
 
-        cluster_dict = {ESI_CLUSTER_UUID: cluster_uuid}
+        cluster_dict = {utils.ESI_CLUSTER_UUID: cluster_uuid}
 
         network_config = node_config['network']
 
         # create network port
         port, trunk = self.get_port_from_network_config(node, network_config)
         if trunk:
-            cluster_dict[ESI_TRUNK_UUID] = trunk.id
+            cluster_dict[utils.ESI_TRUNK_UUID] = trunk.id
         else:
-            cluster_dict[ESI_PORT_UUID] = port.id
+            cluster_dict[utils.ESI_PORT_UUID] = port.id
 
         # provision
         if provisioning_type == 'image':
@@ -213,32 +195,34 @@ class Orchestrate(command.Lister):
                 node_config['provisioning']['image_uuid'])
             ssh_key = node_config['provisioning'].get('ssh_key', None)
             if ssh_key is None:
-                raise ESIOrchestrationException(
+                raise utils.ESIOrchestrationException(
                     "ssh_key must be specified for image provisioning")
             print("* Provisioning node %s with image %s" % (
                 node.name, image.name))
-            utils.provision_node_with_image(
+            esi_utils.provision_node_with_image(
                 node.uuid, node.resource_class, port.id, image.id,
                 ssh_key)
         elif provisioning_type == 'image_url':
             url = node_config['provisioning'].get('url', None)
             if url is None:
-                raise ESIOrchestrationException(
+                raise utils.ESIOrchestrationException(
                     "url must be specified for image URL provisioning")
             print("* Provisioning node %s from url %s" % (
                 node.name, url))
-            utils.boot_node_from_url(node.uuid, url, port.id, ironic_client)
+            esi_utils.boot_node_from_url(
+                node.uuid, url, port.id, ironic_client)
 
         if 'fip_network_uuid' in network_config:
             print("* Assigning floating IP to node %s on port %s" % (
                 node.name, port.name))
             fip_network = neutron_client.find_network(
                 network_config['fip_network_uuid'])
-            fip = utils.get_or_assign_port_floating_ip(
+            fip = esi_utils.get_or_assign_port_floating_ip(
                 port, fip_network, neutron_client)
-            cluster_dict[ESI_FIP_UUID] = fip.id
+            cluster_dict[utils.ESI_FIP_UUID] = fip.id
 
-        self.set_node_cluster_info(node, cluster_dict)
+        utils.set_node_cluster_info(
+            ironic_client, node.uuid, cluster_dict)
 
         return node, port
 
@@ -262,7 +246,7 @@ class Orchestrate(command.Lister):
                 provisioning_type = \
                     node_config['provisioning']['provisioning_type']
                 if provisioning_type not in self.PROVISIONING_METHODS:
-                    raise ESIOrchestrationException(
+                    raise utils.ESIOrchestrationException(
                         "Unknown provisioning method %s" % provisioning_type)
                 nodes = node_config['nodes']['ironic_nodes']
                 for node in nodes:
@@ -280,12 +264,12 @@ class Orchestrate(command.Lister):
         for future in futures:
             node, port = future.result()
             network_names, _, fixed_ips \
-                = utils.get_full_network_info_from_port(
+                = esi_utils.get_full_network_info_from_port(
                     port, neutron_client, networks_dict)
             floating_ip_addresses, floating_network_names \
-                = utils.get_floating_ip(port.id,
-                                        floating_ips,
-                                        networks_dict)
+                = esi_utils.get_floating_ip(port.id,
+                                            floating_ips,
+                                            networks_dict)
             data.append([node.name,
                          port.name,
                          "\n".join(network_names),
@@ -328,39 +312,10 @@ class Undeploy(command.Command):
         cluster_found = False
         for node in nodes:
             extra = node.extra
-            if extra.get(ESI_CLUSTER_UUID, None) == cluster_uuid:
+            if extra.get(utils.ESI_CLUSTER_UUID, None) == cluster_uuid:
                 cluster_found = True
                 print("* Node %s" % node.name)
-                node_extra_update = []
-                node_extra_update.append(
-                    {'path': "/extra/esi_cluster_uuid",
-                     'op': 'remove'})
-
-                if ESI_PORT_UUID in extra:
-                    port_uuid = extra[ESI_PORT_UUID]
-                    print("   * deleting port %s" % port_uuid)
-                    neutron_client.delete_port(port_uuid)
-                    node_extra_update.append(
-                        {'path': "/extra/esi_port_uuid",
-                         'op': 'remove'})
-                if ESI_TRUNK_UUID in extra:
-                    trunk_uuid = extra[ESI_TRUNK_UUID]
-                    print("   * deleting trunk %s" % trunk_uuid)
-                    trunk = neutron_client.find_trunk(trunk_uuid)
-                    if trunk:
-                        utils.delete_trunk(neutron_client, trunk)
-                    node_extra_update.append(
-                        {'path': "/extra/esi_trunk_uuid",
-                         'op': 'remove'})
-                if ESI_FIP_UUID in extra:
-                    fip_uuid = extra[ESI_FIP_UUID]
-                    print("   * deleting fip %s" % fip_uuid)
-                    neutron_client.delete_ip(fip_uuid)
-                    node_extra_update.append(
-                        {'path': "/extra/esi_fip_uuid",
-                         'op': 'remove'})
-                ironic_client.node.update(node.uuid, node_extra_update)
-                ironic_client.node.set_provision_state(node.uuid, 'deleted')
+                utils.clean_cluster_node(ironic_client, neutron_client, node)
 
         if cluster_found:
             print("UNDEPLOY COMPLETE")

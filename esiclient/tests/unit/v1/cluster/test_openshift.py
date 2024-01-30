@@ -20,6 +20,7 @@ from unittest import TestCase
 from esiclient.tests.unit import base
 from esiclient.tests.unit import utils
 from esiclient.v1.cluster import openshift
+from esiclient.v1.cluster import utils as cluster_utils
 
 
 class MockResponse:
@@ -306,6 +307,9 @@ class TestOrchestrate(base.TestCommand):
         })
 
     @mock.patch(
+        'esiclient.v1.cluster.utils.set_node_cluster_info',
+        autospec=True)
+    @mock.patch(
         'esiclient.utils.get_or_assign_port_floating_ip',
         autospec=True)
     @mock.patch(
@@ -330,7 +334,7 @@ class TestOrchestrate(base.TestCommand):
                                   "API_TOKEN": "api-token"})
     def test_take_action(self, mock_load, mock_loads, mock_sleep, mock_caia,
                          mock_wfn, mock_bnfu, mock_gocp, mock_gocpbi,
-                         mock_goapfi):
+                         mock_goapfi, mock_snci):
         mock_load.return_value = {
             "cluster_name": "test_cluster",
             "api_vip": "1.1.1.1",
@@ -398,8 +402,6 @@ class TestOrchestrate(base.TestCommand):
                 'openshift_version': '1',
                 'high_availability_mode': 'Full',
                 'base_dns_domain': "foo.bar",
-                'api_vip': '1.1.1.1',
-                'ingress_vip': '2.2.2.2',
                 'ssh_public_key': "ssh-public-key",
                 'pull_secret': 'pull_secret_value'
             }),
@@ -422,7 +424,17 @@ class TestOrchestrate(base.TestCommand):
             call("clusters/%s/" % self.cluster_id, 'get', headers),
             # set machine network cidr
             call("clusters/%s" % self.cluster_id, 'patch', headers,
-                 {'machine_network_cidr': self.private_subnet.cidr}),
+                 {
+                     'machine_network_cidr': self.private_subnet.cidr,
+                     'api_vips': [{
+                         'cluster_id': self.cluster_id,
+                         'ip': '1.1.1.1'
+                     }],
+                     'ingress_vips': [{
+                         'cluster_id': self.cluster_id,
+                         'ip': '2.2.2.2'
+                     }]
+                 }),
             # start installing
             call("clusters/%s/actions/install" % self.cluster_id, 'post',
                  headers),
@@ -470,6 +482,23 @@ class TestOrchestrate(base.TestCommand):
                  self.app.client_manager.network),
         ])
         self.assertEqual(expected, results)
+        mock_snci.assert_has_calls([
+            call(self.app.client_manager.baremetal, 'node1',
+                 {
+                     cluster_utils.ESI_CLUSTER_UUID: 'cluster-id',
+                     cluster_utils.ESI_PORT_UUID: 'private_port_uuid_1',
+                 }),
+            call(self.app.client_manager.baremetal, 'node2',
+                 {
+                     cluster_utils.ESI_CLUSTER_UUID: 'cluster-id',
+                     cluster_utils.ESI_PORT_UUID: 'private_port_uuid_2',
+                 }),
+            call(self.app.client_manager.baremetal, 'node3',
+                 {
+                     cluster_utils.ESI_CLUSTER_UUID: 'cluster-id',
+                     cluster_utils.ESI_PORT_UUID: 'private_port_uuid_3',
+                 }),
+        ])
 
     @mock.patch('json.load', autospec=True)
     @mock.patch.dict(os.environ, {"PULL_SECRET": "pull_secret_file",
@@ -495,7 +524,7 @@ class TestOrchestrate(base.TestCommand):
 
         with patch("builtins.open"):
             self.assertRaisesRegex(
-                openshift.OrchestrationException,
+                cluster_utils.ESIOrchestrationException,
                 'Please specify these missing values',
                 self.cmd.take_action, parsed_args)
 
@@ -523,7 +552,7 @@ class TestOrchestrate(base.TestCommand):
 
         with patch("builtins.open"):
             self.assertRaisesRegex(
-                openshift.OrchestrationException,
+                cluster_utils.ESIOrchestrationException,
                 'Please export PULL_SECRET',
                 self.cmd.take_action, parsed_args)
 
@@ -533,48 +562,6 @@ class TestUndeploy(base.TestCommand):
     def setUp(self):
         super(TestUndeploy, self).setUp()
         self.cmd = openshift.Undeploy(self.app, None)
-
-        self.provisioning_port1 = utils.create_mock_object({
-            "id": "provisioning_port_uuid_1",
-            "network_id": "network_uuid_2",
-        })
-        self.provisioning_port2 = utils.create_mock_object({
-            "id": "provisioning_port_uuid_2",
-            "network_id": "network_uuid_2",
-        })
-        self.provisioning_port3 = utils.create_mock_object({
-            "id": "provisioning_port_uuid_3",
-            "network_id": "network_uuid_2",
-        })
-        self.private_port1 = utils.create_mock_object({
-            "id": "private_port_uuid_1",
-            "network_id": "network_uuid_1",
-        })
-        self.private_port2 = utils.create_mock_object({
-            "id": "private_port_uuid_2",
-            "network_id": "network_uuid_1",
-        })
-        self.private_port3 = utils.create_mock_object({
-            "id": "private_port_uuid_3",
-            "network_id": "network_uuid_1",
-        })
-
-        def mock_find_port(uuid):
-            if uuid == "esi-node1-provisioning_network":
-                return self.provisioning_port1
-            if uuid == "esi-node2-provisioning_network":
-                return self.provisioning_port2
-            if uuid == "esi-node3-provisioning_network":
-                return self.provisioning_port3
-            if uuid == "esi-node1-private_network":
-                return self.private_port1
-            if uuid == "esi-node2-private_network":
-                return self.private_port2
-            if uuid == "esi-node3-private_network":
-                return self.private_port3
-            return None
-        self.app.client_manager.network.find_port.\
-            side_effect = mock_find_port
 
         self.api_port = utils.create_mock_object({
             "id": "api_port_uuid_1",
@@ -616,15 +603,38 @@ class TestUndeploy(base.TestCommand):
         self.app.client_manager.network.delete_ip.\
             return_value = None
 
-        self.app.client_manager.baremetal.node.set_provision_state.\
-            return_value = None
+        self.node1 = utils.create_mock_object({
+            "uuid": "node_uuid_1",
+            "name": "node1",
+        })
+        self.node2 = utils.create_mock_object({
+            "uuid": "node_uuid_2",
+            "name": "node2",
+        })
+        self.node3 = utils.create_mock_object({
+            "uuid": "node_uuid_3",
+            "name": "node3",
+        })
 
-    @mock.patch('time.sleep', autospec=True)
+        def mock_get_node(name):
+            if name == "node1":
+                return self.node1
+            if name == "node2":
+                return self.node2
+            if name == "node3":
+                return self.node3
+            return None
+        self.app.client_manager.baremetal.node.get.\
+            side_effect = mock_get_node
+
+    @mock.patch(
+        'esiclient.v1.cluster.utils.clean_cluster_node',
+        autospec=True)
     @mock.patch('json.loads', autospec=True)
     @mock.patch('json.load', autospec=True)
     @mock.patch.dict(os.environ, {"PULL_SECRET": "pull_secret_file",
                                   "API_TOKEN": "api-token"})
-    def test_take_action(self, mock_load, mock_loads, mock_sleep):
+    def test_take_action(self, mock_load, mock_loads, mock_ccn):
         mock_load.return_value = {
             "cluster_name": "test_cluster",
             "api_vip": "1.1.1.1",
@@ -663,24 +673,21 @@ class TestUndeploy(base.TestCommand):
         self.app.client_manager.network.delete_port.assert_has_calls([
             call('api_port_uuid_1'),
             call('apps_port_uuid_1'),
-            call('provisioning_port_uuid_1'),
-            call('private_port_uuid_1'),
-            call('provisioning_port_uuid_2'),
-            call('private_port_uuid_2'),
-            call('provisioning_port_uuid_3'),
-            call('private_port_uuid_3')
         ])
-        self.app.client_manager.baremetal.node.set_provision_state.\
+        self.app.client_manager.baremetal.node.get.\
             assert_has_calls([
-                call('node1', 'deleted'),
-                call('node2', 'deleted'),
-                call('node3', 'deleted')
+                call('node1'),
+                call('node2'),
+                call('node3')
             ])
-        self.app.client_manager.network.find_port.assert_has_calls([
-            call('esi-node1-provisioning_network'),
-            call('esi-node1-private_network'),
-            call('esi-node2-provisioning_network'),
-            call('esi-node2-private_network'),
-            call('esi-node3-provisioning_network'),
-            call('esi-node3-private_network')
+        mock_ccn.assert_has_calls([
+            call(self.app.client_manager.baremetal,
+                 self.app.client_manager.network,
+                 self.node1),
+            call(self.app.client_manager.baremetal,
+                 self.app.client_manager.network,
+                 self.node2),
+            call(self.app.client_manager.baremetal,
+                 self.app.client_manager.network,
+                 self.node3),
         ])

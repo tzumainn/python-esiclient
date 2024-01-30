@@ -18,6 +18,7 @@ from mock import patch
 from esiclient.tests.unit import base
 from esiclient.tests.unit import utils
 from esiclient.v1.cluster import cluster
+from esiclient.v1.cluster import utils as cluster_utils
 
 
 class TestList(base.TestCommand):
@@ -168,6 +169,9 @@ class TestOrchestrate(base.TestCommand):
         self.app.client_manager.image.find_image.return_value = self.image
 
     @mock.patch(
+        'esiclient.v1.cluster.utils.set_node_cluster_info',
+        autospec=True)
+    @mock.patch(
         'esiclient.utils.get_floating_ip',
         autospec=True)
     @mock.patch(
@@ -192,7 +196,7 @@ class TestOrchestrate(base.TestCommand):
     @mock.patch('json.load', autospec=True)
     def test_take_action(self, mock_load, mock_uuid, mock_ct, mock_gocp,
                          mock_pnwi, mock_bnfu, mock_goapfi, mock_gfnifp,
-                         mock_gfi):
+                         mock_gfi, mock_snci):
         mock_load.return_value = {
             "node_configs": [
                 {
@@ -276,21 +280,23 @@ class TestOrchestrate(base.TestCommand):
         )
         assert mock_gfnifp.call_count == 3
         assert mock_gfi.call_count == 3
-        self.app.client_manager.baremetal.node.update.assert_has_calls([
-            call('node_uuid_1', [{'path': '/extra/esi_cluster_uuid',
-                                  'value': 'cluster-uuid', 'op': 'add'},
-                                 {'path': '/extra/esi_port_uuid',
-                                  'value': 'port_uuid_1', 'op': 'add'},
-                                 {'path': '/extra/esi_fip_uuid',
-                                  'value': 'fip_uuid_1', 'op': 'add'}]),
-            call('node_uuid_2', [{'path': '/extra/esi_cluster_uuid',
-                                  'value': 'cluster-uuid', 'op': 'add'},
-                                 {'path': '/extra/esi_port_uuid', 'value':
-                                  'port_uuid_2', 'op': 'add'}]),
-            call('node_uuid_3', [{'path': '/extra/esi_cluster_uuid',
-                                  'value': 'cluster-uuid', 'op': 'add'},
-                                 {'path': '/extra/esi_port_uuid',
-                                  'value': 'port_uuid_3', 'op': 'add'}])
+        mock_snci.assert_has_calls([
+            call(self.app.client_manager.baremetal, 'node_uuid_1',
+                 {
+                     cluster_utils.ESI_CLUSTER_UUID: 'cluster-uuid',
+                     cluster_utils.ESI_PORT_UUID: 'port_uuid_1',
+                     cluster_utils.ESI_FIP_UUID: 'fip_uuid_1'
+                 }),
+            call(self.app.client_manager.baremetal, 'node_uuid_2',
+                 {
+                     cluster_utils.ESI_CLUSTER_UUID: 'cluster-uuid',
+                     cluster_utils.ESI_PORT_UUID: 'port_uuid_2',
+                 }),
+            call(self.app.client_manager.baremetal, 'node_uuid_3',
+                 {
+                     cluster_utils.ESI_CLUSTER_UUID: 'cluster-uuid',
+                     cluster_utils.ESI_PORT_UUID: 'port_uuid_3',
+                 }),
         ])
 
     @mock.patch('json.load', autospec=True)
@@ -335,7 +341,7 @@ class TestOrchestrate(base.TestCommand):
 
         with patch("builtins.open"):
             self.assertRaisesRegex(
-                cluster.ESIOrchestrationException,
+                cluster_utils.ESIOrchestrationException,
                 "Cannot find 3 free baremetal nodes",
                 self.cmd.take_action,
                 parsed_args)
@@ -387,7 +393,7 @@ class TestOrchestrate(base.TestCommand):
 
         with patch("builtins.open"):
             self.assertRaisesRegex(
-                cluster.ESIOrchestrationException,
+                cluster_utils.ESIOrchestrationException,
                 "node5 is not an available node",
                 self.cmd.take_action,
                 parsed_args)
@@ -439,7 +445,7 @@ class TestOrchestrate(base.TestCommand):
 
         with patch("builtins.open"):
             self.assertRaisesRegex(
-                cluster.ESIOrchestrationException,
+                cluster_utils.ESIOrchestrationException,
                 "Must specify a network",
                 self.cmd.take_action,
                 parsed_args)
@@ -491,7 +497,7 @@ class TestOrchestrate(base.TestCommand):
 
         with patch("builtins.open"):
             self.assertRaisesRegex(
-                cluster.ESIOrchestrationException,
+                cluster_utils.ESIOrchestrationException,
                 "Unknown provisioning method",
                 self.cmd.take_action,
                 parsed_args)
@@ -547,20 +553,14 @@ class TestUndeploy(base.TestCommand):
             "name": "node5",
             "extra": {}
         })
-        self.trunk = utils.create_mock_object({
-            "id": "trunk_uuid_1",
-            "name": "trunk",
-        })
 
         self.app.client_manager.baremetal.node.list.return_value = [
             self.node1, self.node2, self.node3, self.node4]
-        self.app.client_manager.network.find_trunk.return_value = \
-            self.trunk
 
     @mock.patch(
-        'esiclient.utils.delete_trunk',
+        'esiclient.v1.cluster.utils.clean_cluster_node',
         autospec=True)
-    def test_take_action(self, mock_dt):
+    def test_take_action(self, mock_ccn):
         arglist = ['cluster-uuid-1']
         verifylist = []
 
@@ -571,35 +571,14 @@ class TestUndeploy(base.TestCommand):
         self.app.client_manager.baremetal.node.list.assert_called_once_with(
             fields=["uuid", "name", "extra"],
         )
-        self.app.client_manager.baremetal.node.set_provision_state.\
-            assert_has_calls([
-                call('node_uuid_1', 'deleted'),
-                call('node_uuid_2', 'deleted'),
-                call('node_uuid_3', 'deleted')
-            ])
-        self.app.client_manager.network.find_trunk.\
-            assert_called_once_with('trunk-uuid-1')
-        mock_dt.assert_called_once_with(
-            self.app.client_manager.network, self.trunk)
-        self.app.client_manager.network.delete_port.assert_has_calls([
-            call('port-uuid-2'),
-            call('port-uuid-3')
-        ])
-        self.app.client_manager.network.delete_ip.assert_called_once_with(
-            'fip-uuid-1'
-        )
-        self.app.client_manager.baremetal.node.update.assert_has_calls([
-            call('node_uuid_1', [
-                {'path': '/extra/esi_cluster_uuid', 'op': 'remove'},
-                {'path': '/extra/esi_trunk_uuid', 'op': 'remove'},
-                {'path': '/extra/esi_fip_uuid', 'op': 'remove'}
-            ]),
-            call('node_uuid_2', [
-                {'path': '/extra/esi_cluster_uuid', 'op': 'remove'},
-                {'path': '/extra/esi_port_uuid', 'op': 'remove'}
-            ]),
-            call('node_uuid_3', [
-                {'path': '/extra/esi_cluster_uuid', 'op': 'remove'},
-                {'path': '/extra/esi_port_uuid', 'op': 'remove'}
-            ])
+        mock_ccn.assert_has_calls([
+            call(self.app.client_manager.baremetal,
+                 self.app.client_manager.network,
+                 self.node1),
+            call(self.app.client_manager.baremetal,
+                 self.app.client_manager.network,
+                 self.node2),
+            call(self.app.client_manager.baremetal,
+                 self.app.client_manager.network,
+                 self.node3),
         ])

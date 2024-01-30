@@ -19,7 +19,8 @@ import time
 from osc_lib.command import command
 from osc_lib.i18n import _
 
-from esiclient import utils
+from esiclient import utils as esi_utils
+from esiclient.v1.cluster import utils
 
 
 BASE_ASSISTED_INSTALLER_URL = \
@@ -70,10 +71,6 @@ class OSAIException(Exception):
     pass
 
 
-class OrchestrationException(Exception):
-    pass
-
-
 class Orchestrate(command.Lister):
     """Orchestrate an OpenShift cluster using the Assisted Installer API"""
 
@@ -91,7 +88,7 @@ class Orchestrate(command.Lister):
             flags = "--cluster-id %s" % cluster_id
             if infra_env_id:
                 flags = "%s --infra-env-id %s" % (flags, infra_env_id)
-        command = "openstack esi orchestrate openshift %s %s" % \
+        command = "openstack esi openshift orchestrate %s %s" % \
             (flags, cluster_config_file)
         if message:
             print(message)
@@ -132,7 +129,7 @@ class Orchestrate(command.Lister):
         missing_fields = list(
             set(self.REQUIRED_FIELDS).difference(cluster_config.keys()))
         if missing_fields:
-            raise OrchestrationException(
+            raise utils.ESIOrchestrationException(
                 "Please specify these missing values in your config file: %s" %
                 missing_fields)
 
@@ -152,7 +149,7 @@ class Orchestrate(command.Lister):
         ssh_public_key = cluster_config.get('ssh_public_key')
 
         if 'PULL_SECRET' not in os.environ:
-            raise OrchestrationException(
+            raise utils.ESIOrchestrationException(
                 'Please export PULL_SECRET in your environment')
         pull_secret = json.loads(os.environ['PULL_SECRET'])
 
@@ -174,8 +171,6 @@ class Orchestrate(command.Lister):
                     "openshift_version": openshift_version,
                     "high_availability_mode": high_availability_mode,
                     "base_dns_domain": base_dns_domain,
-                    "api_vip": api_vip,
-                    "ingress_vip": ingress_vip,
                     "ssh_public_key": ssh_public_key,
                     "pull_secret": pull_secret
                 }
@@ -187,7 +182,7 @@ class Orchestrate(command.Lister):
                     e,
                     parsed_args.cluster_config_file,
                     message='Error creating OpenShift cluster')
-                raise OrchestrationException()
+                raise utils.ESIOrchestrationException()
         print("cluster ID: %s" % cluster_id)
 
         # get infra env id
@@ -210,7 +205,7 @@ class Orchestrate(command.Lister):
                     parsed_args.cluster_config_file,
                     cluster_id=cluster_id,
                     message='Error creating OpenShift cluster infra env')
-                raise OrchestrationException()
+                raise utils.ESIOrchestrationException()
         print("infra env ID: %s" % infra_env_id)
 
         # register nodes
@@ -231,12 +226,12 @@ class Orchestrate(command.Lister):
                     node = ironic_client.node.get(node_name)
                     if node.provision_state == 'available':
                         print("* deploying %s" % node_name)
-                        port_name = utils.get_port_name(
+                        port_name = esi_utils.get_port_name(
                             provisioning_network.name, prefix=node_name)
-                        port = utils.get_or_create_port(
+                        port = esi_utils.get_or_create_port(
                             port_name,
                             provisioning_network, neutron_client)
-                        utils.boot_node_from_url(
+                        esi_utils.boot_node_from_url(
                             node_name, image_url, port['id'],
                             ironic_client)
                     else:
@@ -253,7 +248,7 @@ class Orchestrate(command.Lister):
                 cluster_id=cluster_id,
                 infra_env_id=infra_env_id,
                 message='Error registering nodes to OpenShift cluster')
-            raise OrchestrationException()
+            raise utils.ESIOrchestrationException()
 
         # move nodes to private network
         try:
@@ -272,16 +267,24 @@ class Orchestrate(command.Lister):
                             already_attached = True
                         else:
                             ironic_client.node.vif_detach(node, port_uuid)
+                            neutron_client.delete_port(port_uuid)
                 if already_attached:
                     print("* %s already on private network" % node)
                 else:
                     print("* moving %s onto private network" % node)
-                    port_name = utils.get_port_name(
+                    port_name = esi_utils.get_port_name(
                         private_network.name, prefix=node)
-                    port = utils.get_or_create_port(
+                    port = esi_utils.get_or_create_port(
                         port_name, private_network, neutron_client)
                     ironic_client.node.vif_attach(node, port['id'])
                     ironic_client.node.set_boot_device(node, 'disk', True)
+                    cluster_dict = {
+                        utils.ESI_CLUSTER_UUID: cluster_id,
+                        utils.ESI_PORT_UUID: port['id']
+                    }
+                    # this is already node name
+                    utils.set_node_cluster_info(
+                        ironic_client, node, cluster_dict)
         except Exception as e:
             self._print_failure_message(
                 e,
@@ -290,7 +293,7 @@ class Orchestrate(command.Lister):
                 infra_env_id=infra_env_id,
                 message='Error preparing nodes after ' +
                 'OpenShift cluster registration')
-            raise OrchestrationException()
+            raise utils.ESIOrchestrationException()
 
         # install cluster
         try:
@@ -305,7 +308,17 @@ class Orchestrate(command.Lister):
                         private_subnet_name)
                     response = call_assisted_installer_api(
                         "clusters/%s" % cluster_id, 'patch', headers,
-                        {'machine_network_cidr': private_subnet.cidr})
+                        {
+                            'machine_network_cidr': private_subnet.cidr,
+                            'api_vips': [{
+                                'cluster_id': cluster_id,
+                                'ip': api_vip
+                            }],
+                            'ingress_vips': [{
+                                'cluster_id': cluster_id,
+                                'ip': ingress_vip
+                            }]
+                        })
                     wait_for_nodes(
                         infra_env_id, headers, 3, 'known')
                     print("starting install...")
@@ -336,7 +349,7 @@ class Orchestrate(command.Lister):
                 cluster_id=cluster_id,
                 infra_env_id=infra_env_id,
                 message='Error installing OpenShift cluster')
-            raise OrchestrationException()
+            raise utils.ESIOrchestrationException()
 
         # assign floating IPs to apps and api endpoints
         try:
@@ -347,15 +360,15 @@ class Orchestrate(command.Lister):
             private_network = neutron_client.find_network(private_network_name)
             private_subnet = neutron_client.find_subnet(private_subnet_name)
 
-            api_port = utils.get_or_create_port_by_ip(
+            api_port = esi_utils.get_or_create_port_by_ip(
                 api_vip, "%s-api" % cluster_name,
                 private_network, private_subnet, neutron_client)
-            api_fip = utils.get_or_assign_port_floating_ip(
+            api_fip = esi_utils.get_or_assign_port_floating_ip(
                 api_port, external_network, neutron_client)
-            apps_port = utils.get_or_create_port_by_ip(
+            apps_port = esi_utils.get_or_create_port_by_ip(
                 ingress_vip, "%s-apps" % cluster_name,
                 private_network, private_subnet, neutron_client)
-            apps_fip = utils.get_or_assign_port_floating_ip(
+            apps_fip = esi_utils.get_or_assign_port_floating_ip(
                 apps_port, external_network, neutron_client)
         except Exception as e:
             self._print_failure_message(
@@ -364,7 +377,7 @@ class Orchestrate(command.Lister):
                 cluster_id=cluster_id,
                 infra_env_id=infra_env_id,
                 message='Error during OpenShift cluster post-install')
-            raise OrchestrationException()
+            raise utils.ESIOrchestrationException()
 
         print("OPENSHIFT CLUSTER INSTALL COMPLETE")
 
@@ -399,14 +412,11 @@ class Undeploy(command.Command):
         missing_fields = list(
             set(self.REQUIRED_FIELDS).difference(cluster_config.keys()))
         if missing_fields:
-            raise OrchestrationException(
+            raise utils.ESIOrchestrationException(
                 "Please specify these missing values in your config file: %s" %
                 missing_fields)
 
         nodes = cluster_config.get('nodes')
-        provisioning_network_name = cluster_config.get(
-            'provisioning_network_name', 'provisioning')
-        private_network_name = cluster_config.get('private_network_name')
         api_vip = cluster_config.get('api_vip')
         ingress_vip = cluster_config.get('ingress_vip')
 
@@ -432,28 +442,10 @@ class Undeploy(command.Command):
 
         # undeploy nodes
         print("* undeploying nodes")
-        for node in nodes:
-            print("   * %s" % node)
-            ironic_client.node.set_provision_state(node, 'deleted')
-        print("* waiting for nodes to start undeploy before deleting ports")
-        time.sleep(15)
-
-        # delete provisioning and private network ports
-        print("* deleting Neutron ports")
-        for node in nodes:
-            provisioning_port_name = utils.get_port_name(
-                provisioning_network_name, prefix=node)
-            provisioning_port = neutron_client.find_port(
-                provisioning_port_name)
-            if provisioning_port:
-                print("   * %s" % provisioning_port_name)
-                neutron_client.delete_port(provisioning_port.id)
-            private_port_name = utils.get_port_name(
-                private_network_name, prefix=node)
-            private_port = neutron_client.find_port(private_port_name)
-            if private_port:
-                print("   * %s" % private_port_name)
-                neutron_client.delete_port(private_port.id)
+        for node_name in nodes:
+            print("   * %s" % node_name)
+            node = ironic_client.node.get(node_name)
+            utils.clean_cluster_node(ironic_client, neutron_client, node)
 
         print("UNDEPLOY COMPLETE")
         print("-----------------")
