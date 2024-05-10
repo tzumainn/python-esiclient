@@ -42,6 +42,15 @@ class List(command.Lister):
         )
         return parser
 
+    def _get_ports(self, neutron_client, network=None):
+        if network:
+            filter_network = neutron_client.find_network(network)
+            neutron_ports = list(neutron_client.ports(
+                network_id=filter_network.id))
+        else:
+            neutron_ports = list(neutron_client.ports())
+        return neutron_ports
+
     def take_action(self, parsed_args):
         self.log.debug("take_action(%s)", parsed_args)
 
@@ -67,18 +76,33 @@ class List(command.Lister):
         filter_network = None
         if parsed_args.network:
             filter_network = neutron_client.find_network(parsed_args.network)
-            neutron_ports = list(neutron_client.ports(
-                network_id=filter_network.id))
-        else:
-            neutron_ports = list(neutron_client.ports())
 
-        floating_ips = list(neutron_client.ips())
+        # base network information
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            f1 = executor.submit(neutron_client.ips)
+            f2 = executor.submit(neutron_client.networks)
+            f3 = executor.submit(
+                self._get_ports, neutron_client, filter_network)
+            floating_ips = list(f1.result())
+            networks = list(f2.result())
+            networks_dict = {n.id: n for n in networks}
+            neutron_ports = f3.result()
 
-        networks = list(neutron_client.networks())
-        networks_dict = {n.id: n for n in networks}
+        # update floating IP list to include port forwarding information
+        for fip in floating_ips:
+            # no need to do this for floating IPs associated with a port,
+            # as port forwarding is irrelevant in such a case
+            if not fip.port_id:
+                pfws = list(neutron_client.port_forwardings(fip))
+                if len(pfws):
+                    fip.port_id = pfws[0].internal_port_id
+                    pfw_ports = ["%s:%s" % (pfw.internal_port,
+                                            pfw.external_port)
+                                 for pfw in pfws]
+                    fip.floating_ip_address = "%s (%s)" % (
+                        fip.floating_ip_address, ','.join(pfw_ports))
 
         data = []
-
         for port in ports:
             if not parsed_args.node:
                 node_name = next((node for node in nodes
