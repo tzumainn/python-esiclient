@@ -80,18 +80,27 @@ class TestList(base.TestCommand):
             "id": "floating_network_id",
             "name": "floating_network"
         })
-        self.floating_ip1 = utils.create_mock_object({
-            "id": "floating_ip_uuid_1",
-            "floating_ip_address": "9.9.9.9",
-            "floating_network_id": "floating_network_id",
-            "port_id": "neutron_port_uuid_1"
-        })
-        self.floating_ip2 = utils.create_mock_object({
+        self.floating_ip = utils.create_mock_object({
             "id": "floating_ip_uuid_2",
             "floating_ip_address": "8.8.8.8",
             "floating_network_id": "floating_network_id",
             "port_id": "neutron_port_uuid_2"
-
+        })
+        self.floating_ip_pfw = utils.create_mock_object({
+            "id": "floating_ip_uuid_1",
+            "floating_ip_address": "9.9.9.9",
+            "floating_network_id": "floating_network_id",
+            "port_id": None
+        })
+        self.pfw1 = utils.create_mock_object({
+            "internal_port": 22,
+            "external_port": 22,
+            "internal_port_id": "neutron_port_uuid_1"
+        })
+        self.pfw2 = utils.create_mock_object({
+            "internal_port": 23,
+            "external_port": 23,
+            "internal_port_id": "neutron_port_uuid_1"
         })
 
         def mock_node_get(node_uuid):
@@ -108,9 +117,16 @@ class TestList(base.TestCommand):
             elif port_uuid == "neutron_port_uuid_2":
                 return self.neutron_port2
             return None
-
         self.app.client_manager.network.get_port.\
             side_effect = mock_neutron_port_get
+
+        def mock_neutron_port_forwardings(fip):
+            if fip.id == "floating_ip_uuid_1":
+                return [self.pfw1, self.pfw2]
+            return []
+        self.app.client_manager.network.port_forwardings.\
+            side_effect = mock_neutron_port_forwardings
+
         self.app.client_manager.network.find_network.\
             return_value = self.network
         self.app.client_manager.network.get_network.\
@@ -122,7 +138,7 @@ class TestList(base.TestCommand):
         self.app.client_manager.baremetal.node.list.\
             return_value = [self.node1, self.node2]
         self.app.client_manager.network.ips.\
-            return_value = [self.floating_ip1, self.floating_ip2]
+            return_value = [self.floating_ip, self.floating_ip_pfw]
 
     def test_take_action(self):
         self.app.client_manager.baremetal.port.list.\
@@ -138,7 +154,7 @@ class TestList(base.TestCommand):
           ["Node", "MAC Address", "Port", "Network", "Fixed IP",
            "Floating Network", "Floating IP"],
           [['node1', 'aa:aa:aa:aa:aa:aa', 'neutron_port_1', 'test_network',
-           '1.1.1.1', 'floating_network', '9.9.9.9'],
+           '1.1.1.1', 'floating_network', '9.9.9.9 (22:22,23:23)'],
            ['node2', 'bb:bb:bb:bb:bb:bb', None, None, None, None, None],
            ['node2', 'cc:cc:cc:cc:cc:cc', 'neutron_port_2', 'test_network',
             '2.2.2.2', 'floating_network', '8.8.8.8']]
@@ -204,7 +220,7 @@ class TestList(base.TestCommand):
              "Floating Network", "Floating IP"],
             [["node1", "aa:aa:aa:aa:aa:aa",
               "neutron_port_1", "test_network", "1.1.1.1",
-              "floating_network", "9.9.9.9"],
+              "floating_network", "9.9.9.9 (22:22,23:23)"],
              ["node2", "cc:cc:cc:cc:cc:cc",
               "neutron_port_2", "test_network", "2.2.2.2",
               "floating_network", "8.8.8.8"]]
