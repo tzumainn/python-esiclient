@@ -10,13 +10,13 @@
 #   License for the specific language governing permissions and limitations
 #   under the License.
 
-import concurrent.futures
 import logging
 
 from osc_lib.command import command
 from osc_lib import exceptions
 from osc_lib.i18n import _
-from oslo_utils import uuidutils
+
+from esi.lib import nodes
 
 from esiclient import utils
 
@@ -42,102 +42,67 @@ class List(command.Lister):
         )
         return parser
 
-    def _get_ports(self, neutron_client, network=None):
-        if network:
-            filter_network = neutron_client.find_network(network)
-            neutron_ports = list(neutron_client.ports(
-                network_id=filter_network.id))
-        else:
-            neutron_ports = list(neutron_client.ports())
-        return neutron_ports
-
     def take_action(self, parsed_args):
         self.log.debug("take_action(%s)", parsed_args)
-
-        ironic_client = self.app.client_manager.baremetal
-        neutron_client = self.app.client_manager.network
-
-        if parsed_args.node:
-            ports = ironic_client.port.list(node=parsed_args.node, detail=True)
-            if uuidutils.is_uuid_like(parsed_args.node):
-                node_name = ironic_client.node.get(parsed_args.node).name
-            else:
-                node_name = parsed_args.node
-        else:
-            ports = None
-            nodes = None
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                f1 = executor.submit(ironic_client.port.list, detail=True)
-                f2 = executor.submit(ironic_client.node.list)
-                ports = f1.result()
-                nodes = f2.result()
-
-        filter_network = None
-        if parsed_args.network:
-            filter_network = neutron_client.find_network(parsed_args.network)
-
-        # base network information
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            f1 = executor.submit(neutron_client.ips)
-            f2 = executor.submit(neutron_client.networks)
-            f3 = executor.submit(
-                self._get_ports, neutron_client, filter_network)
-            floating_ips = list(f1.result())
-            networks = list(f2.result())
-            networks_dict = {n.id: n for n in networks}
-            neutron_ports = f3.result()
-
-        # update floating IP list to include port forwarding information
-        for fip in floating_ips:
-            # no need to do this for floating IPs associated with a port,
-            # as port forwarding is irrelevant in such a case
-            if not fip.port_id:
-                pfws = list(neutron_client.port_forwardings(fip))
-                if len(pfws):
-                    fip.port_id = pfws[0].internal_port_id
-                    pfw_ports = ["%s:%s" % (pfw.internal_port,
-                                            pfw.external_port)
-                                 for pfw in pfws]
-                    fip.floating_ip_address = "%s (%s)" % (
-                        fip.floating_ip_address, ','.join(pfw_ports))
+        node_networks = nodes.network_list(
+            self.app.client_manager.sdk_connection,
+            parsed_args.node,
+            parsed_args.network
+        )
 
         data = []
-        for port in ports:
-            if not parsed_args.node:
-                node_name = next((node for node in nodes
-                                  if node.uuid == port.node_uuid), None).name
+        for node_network in node_networks:
+            for node_port in node_network['network_info']:
+                node_name = node_network['node'].name
+                mac_address = node_port['baremetal_port'].address
 
-            neutron_port_id = port.internal_info.get('tenant_vif_port_id')
-            neutron_port = None
+                network_port_name = None
+                network_names = None
+                fixed_ips = None
+                floating_network = None
+                floating_ip = None
 
-            if neutron_port_id:
-                neutron_port = next((np for np in neutron_ports
-                                     if np.id == neutron_port_id), None)
+                if node_port['networks']:
+                    if len(node_port['network_ports']):
+                        network_port_name = getattr(
+                            node_port['network_ports'][0], 'name')
 
-            if neutron_port is not None:
-                network_id = neutron_port.network_id
+                    parent_network = node_port['networks']['parent']
+                    trunk_networks = node_port['networks']['trunk'] or []
 
-                if not filter_network or filter_network.id == network_id:
-                    network_names, _, fixed_ips \
-                        = utils.get_full_network_info_from_port(
-                            neutron_port, neutron_client, networks_dict)
-                    floating_ip_addresses, floating_network_names \
-                        = utils.get_floating_ip(neutron_port_id,
-                                                floating_ips,
-                                                networks_dict)
-                    data.append([node_name, port.address,
-                                 neutron_port.name,
-                                 "\n".join(network_names),
-                                 "\n".join(fixed_ips),
-                                 "\n".join(floating_network_names)
-                                 if floating_network_names else None,
-                                 "\n".join(floating_ip_addresses)
-                                 if floating_ip_addresses else None]
-                                )
-            elif not filter_network:
-                data.append([node_name, port.address,
-                             None, None, None, None, None])
+                    network_names = '\n'.join([
+                        utils.get_network_display_name(network)
+                        for network in [parent_network] + trunk_networks
+                        if network is not None
+                    ]) or None
+
+                    fixed_ips = '\n'.join([','.join([
+                        ip['ip_address'] for ip in port.fixed_ips])
+                        for port in node_port['network_ports']]) or None
+
+                    if node_port['networks']['floating']:
+                        floating_network = utils.get_network_display_name(
+                            node_port['networks']['floating'])
+
+                        pfwd_ports = ['%s:%s' % (
+                            pfwd.internal_port,
+                            pfwd.external_port)
+                            for pfwd in node_port['port_forwardings']]
+
+                        floating_ip = \
+                            node_port['floating_ip'].floating_ip_address
+                        if len(pfwd_ports):
+                            floating_ip += ' (%s)' % ','.join(pfwd_ports)
+
+                data.append([
+                    node_name,
+                    mac_address,
+                    network_port_name,
+                    network_names,
+                    fixed_ips,
+                    floating_network,
+                    floating_ip,
+                ])
 
         return ["Node", "MAC Address", "Port", "Network", "Fixed IP",
                 "Floating Network", "Floating IP"], data
