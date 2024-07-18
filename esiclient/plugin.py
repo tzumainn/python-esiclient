@@ -12,6 +12,7 @@
 #
 
 import logging
+import os
 
 from osc_lib import utils
 
@@ -42,6 +43,8 @@ def build_option_parser(parser):
     :param argparse.ArgumentParser parser: The parser object that has been
         initialized by OpenStackShell.
     """
+    if ('OS_BAREMETAL_API_VERSION' not in os.environ):
+        os.environ['OS_BAREMETAL_API_VERSION'] = '1.69'
     parser.add_argument(
         '--os-esiclient-api-version',
         metavar='<esiclient-api-version>',
