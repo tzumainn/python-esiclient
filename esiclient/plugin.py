@@ -12,11 +12,13 @@
 #
 
 import logging
+import os
 
 from osc_lib import utils
 
 LOG = logging.getLogger(__name__)
 
+DEFAULT_BAREMETAL_API_VERSION = '1.69'
 DEFAULT_ESICLIENT_API_VERSION = '1'
 
 # Required by the OSC plugin interface
@@ -42,6 +44,8 @@ def build_option_parser(parser):
     :param argparse.ArgumentParser parser: The parser object that has been
         initialized by OpenStackShell.
     """
+    if ('OS_BAREMETAL_API_VERSION' not in os.environ):
+        os.environ['OS_BAREMETAL_API_VERSION'] = DEFAULT_BAREMETAL_API_VERSION
     parser.add_argument(
         '--os-esiclient-api-version',
         metavar='<esiclient-api-version>',
