@@ -13,7 +13,6 @@
 import logging
 
 from osc_lib.command import command
-from osc_lib import exceptions
 from osc_lib.i18n import _
 
 from esi.lib import nodes
@@ -147,87 +146,29 @@ class Attach(command.ShowOne):
     def take_action(self, parsed_args):
         self.log.debug("take_action(%s)", parsed_args)
 
-        node_uuid = parsed_args.node
-        if (parsed_args.network and parsed_args.port) \
-           or (parsed_args.network and parsed_args.trunk) \
-           or (parsed_args.port and parsed_args.trunk):
-            raise exceptions.CommandError(
-                "ERROR: Specify only one of network, port or trunk")
-        if not parsed_args.network and not parsed_args.port \
-           and not parsed_args.trunk:
-            raise exceptions.CommandError(
-                "ERROR: You must specify either network, port, or trunk")
-
-        ironic_client = self.app.client_manager.baremetal
-        neutron_client = self.app.client_manager.network
+        attach_info = {}
 
         if parsed_args.network:
-            network = neutron_client.find_network(parsed_args.network)
-            port = None
-            if network is None:
-                raise exceptions.CommandError(
-                    "ERROR: Unknown network")
-        elif parsed_args.port:
-            port = neutron_client.find_port(parsed_args.port)
-            if port is None:
-                raise exceptions.CommandError(
-                    "ERROR: This is not a port name or UUID")
-        elif parsed_args.trunk:
-            trunk = neutron_client.find_trunk(parsed_args.trunk)
-            port = None
-            if trunk is None:
-                raise exceptions.CommandError(
-                    "ERROR: no trunk named {0}".format(parsed_args.name))
-
-        node = ironic_client.node.get(node_uuid)
-
+            attach_info['network'] = parsed_args.network
+        if parsed_args.port:
+            attach_info['port'] = parsed_args.port
+        if parsed_args.trunk:
+            attach_info['trunk'] = parsed_args.trunk
         if parsed_args.mac_address:
-            bp = ironic_client.port.get_by_address(parsed_args.mac_address)
-            vif_info = {'port_uuid': bp.uuid}
-            mac_string = " on {0}".format(parsed_args.mac_address)
-        else:
-            vif_info = {}
-            mac_string = ""
+            attach_info['mac_address'] = parsed_args.mac_address
 
-            baremetal_ports = ironic_client.port.list(
-                node=node_uuid, detail=True)
-            has_free_port = False
-            for bp in baremetal_ports:
-                if 'tenant_vif_port_id' not in bp.internal_info:
-                    has_free_port = True
-                    break
-
-            if not has_free_port:
-                raise exceptions.CommandError(
-                    "ERROR: Node {0} has no free ports".format(node.name))
-
-        if port:
-            print("Attaching port {1} to node {0}{2}".format(
-                node.name, port.name, mac_string))
-            ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
-        elif parsed_args.network:
-            print("Attaching network {1} to node {0}{2}".format(
-                node.name, network.name, mac_string))
-            port_name = utils.get_port_name(network.name, prefix=node.name)
-            port = utils.get_or_create_port(port_name, network,
-                                            neutron_client)
-            ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
-            port = neutron_client.get_port(port.id)
-        elif parsed_args.trunk:
-            print("Attaching trunk {1} to node {0}{2}".format(
-                node.name, trunk.name, mac_string))
-            port = neutron_client.get_port(trunk.port_id)
-            ironic_client.node.vif_attach(node_uuid, port.id, **vif_info)
-
-        network_names, port_names, fixed_ips \
-            = utils.get_full_network_info_from_port(
-                port, neutron_client)
+        result = nodes.network_attach(
+            self.app.client_manager.sdk_connection,
+            parsed_args.node,
+            attach_info
+        )
 
         return ["Node", "MAC Address", "Port", "Network", "Fixed IP"], \
-            [node.name, port.mac_address,
-             "\n".join(port_names),
-             "\n".join(network_names),
-             "\n".join(fixed_ips)]
+            [result['node'].name, result['ports'][0].mac_address,
+             '\n'.join([port.name for port in result['ports']]),
+             '\n'.join([network.name for network in result['networks']]),
+             '\n'.join([ip['ip_address'] for port in result['ports']
+                        for ip in port.fixed_ips])]
 
 
 class Detach(command.Command):
@@ -251,41 +192,8 @@ class Detach(command.Command):
     def take_action(self, parsed_args):
         self.log.debug("take_action(%s)", parsed_args)
 
-        node_uuid = parsed_args.node
-        port_uuid = parsed_args.port
-
-        ironic_client = self.app.client_manager.baremetal
-        neutron_client = self.app.client_manager.network
-
-        node = ironic_client.node.get(node_uuid)
-
-        if port_uuid:
-            port = neutron_client.find_port(port_uuid)
-            if not port:
-                raise exceptions.CommandError(
-                    "ERROR: Port {1} not attached to node {0}".format(
-                        node.name, port_uuid))
-        else:
-            bm_ports = ironic_client.port.list(node=node_uuid, detail=True)
-
-            mapped_node_port_list = []
-            for bm_port in bm_ports:
-                if bm_port.internal_info.get("tenant_vif_port_id"):
-                    mapped_node_port_list.append(bm_port)
-            if(len(mapped_node_port_list) == 0):
-                raise exceptions.CommandError(
-                    "ERROR: Node {0} is not associated with any port".format(
-                        node.name))
-            elif(len(mapped_node_port_list) > 1):
-                raise exceptions.CommandError(
-                    "ERROR: Node {0} is associated with multiple ports.\
-                    Port must be specified with --port".format(node.name))
-            elif(len(mapped_node_port_list) == 1):
-                port_uuid = mapped_node_port_list[0].internal_info[
-                    "tenant_vif_port_id"]
-                port = neutron_client.find_port(port_uuid)
-
-        print("Detaching node {0} from port {1}".format(
-            node.name, port.name))
-
-        ironic_client.node.vif_detach(node_uuid, port.id)
+        nodes.network_detach(
+            self.app.client_manager.sdk_connection,
+            parsed_args.node,
+            parsed_args.port
+        )
