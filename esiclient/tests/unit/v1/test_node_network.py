@@ -26,41 +26,41 @@ class TestList(base.TestCommand):
         super(TestList, self).setUp()
 
         self.port1 = utils.create_mock_object({
-            "uuid": "port_uuid_1",
+            "id": "port_uuid_1",
             "node_uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
             "address": "aa:aa:aa:aa:aa:aa",
             "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'}
         })
         self.port2 = utils.create_mock_object({
-            "uuid": "port_uuid_2",
+            "id": "port_uuid_2",
             "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "address": "bb:bb:bb:bb:bb:bb",
             "internal_info": {}
         })
         self.port3 = utils.create_mock_object({
-            "uuid": "port_uuid_3",
+            "id": "port_uuid_3",
             "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "address": "cc:cc:cc:cc:cc:cc",
             "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_2'}
         })
         self.port4 = utils.create_mock_object({
-            "uuid": "port_uuid_4",
+            "id": "port_uuid_4",
             "node_uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "address": "dd:dd:dd:dd:dd:dd",
             "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_4'}
         })
         self.port5 = utils.create_mock_object({
-            'uuid': 'port_uuid_5',
+            'id': 'port_uuid_5',
             'node_uuid': '11111111-2222-3333-4444-bbbbbbbbbbbb',
             'address': 'ee:ee:ee:ee:ee:ee',
             'internal_info': {'tenant_vif_port_id': 'neutron_port_uuid_3'}
         })
         self.node1 = utils.create_mock_object({
-            "uuid": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+            "id": "11111111-2222-3333-4444-aaaaaaaaaaaa",
             "name": "node1"
         })
         self.node2 = utils.create_mock_object({
-            "uuid": "11111111-2222-3333-4444-bbbbbbbbbbbb",
+            "id": "11111111-2222-3333-4444-bbbbbbbbbbbb",
             "name": "node2"
         })
         self.network1 = utils.create_mock_object({
@@ -95,6 +95,7 @@ class TestList(base.TestCommand):
             'name': 'neutron_port_3',
             'fixed_ips': [{'ip_address': '3.3.3.3'}],
             'trunk_details': {
+                'trunk_id': 'trunk_uuid_1',
                 'sub_ports': [
                     {'port_id': 'subport_uuid_1'},
                     {'port_id': 'subport_uuid_2'},
@@ -106,14 +107,14 @@ class TestList(base.TestCommand):
             'network_id': 'network_uuid_1',
             'name': 'subport_1',
             'fixed_ips': [{'ip_address': '4.4.4.4'}],
-            'trunk_details': {}
+            'trunk_details': None
         })
         self.subport_2 = utils.create_mock_object({
             'id': 'subport_uuid_2',
             'network_id': 'network_uuid_2',
             'name': 'subport_2',
             'fixed_ips': [{'ip_address': '5.5.5.5'}],
-            'trunk_details': {}
+            'trunk_details': None
         })
         self.floating_network1 = utils.create_mock_object({
             "id": "floating_network_id_1",
@@ -136,7 +137,7 @@ class TestList(base.TestCommand):
             "port_id": None
         })
         self.floating_ip2 = utils.create_mock_object({
-            'id': 'floating_ip uuid_3',
+            'id': 'floating_ip_uuid_3',
             'floating_ip_address': '10.10.10.10',
             'floating_network_id': 'floating_network_id_2',
             'port_id': None
@@ -589,6 +590,140 @@ class TestList(base.TestCommand):
             mock.call(self.floating_network2),
         ])
 
+    @mock.patch('esiclient.utils.get_network_display_name')
+    @mock.patch('esi.lib.nodes.network_list')
+    def test_take_action_long(self,
+                              mock_network_list,
+                              mock_get_network_display_name):
+        mock_network_list.return_value = [
+            {
+                'node': self.node1,
+                'network_info': [
+                    {
+                        'baremetal_port': self.port1,
+                        'network_ports': [self.neutron_port1],
+                        'networks': {
+                            'parent': self.network1,
+                            'trunk': [],
+                            'floating': self.floating_network1,
+                        },
+                        'floating_ip': self.floating_ip_pfw,
+                        'port_forwardings': [self.pfw1, self.pfw2]
+                    }
+                ]
+            },
+            {
+                'node': self.node2,
+                'network_info': [
+                    {
+                        'baremetal_port': self.port2,
+                        'network_ports': [],
+                        'networks': {
+                            'parent': None,
+                            'trunk': [],
+                            'floating': None
+                        },
+                        'floating_ip': None,
+                        'port_forwardings': []
+                    },
+                    {
+                        'baremetal_port': self.port5,
+                        'network_ports': [
+                            self.neutron_port3,
+                            self.subport_1,
+                            self.subport_2
+                        ],
+                        'networks': {
+                            'parent': self.network3,
+                            'trunk': [
+                                self.network1,
+                                self.network2
+                            ],
+                            'floating': self.floating_network2
+                        },
+                        'floating_ip': self.floating_ip2,
+                        'port_forwardings': [self.pfw3]
+                    }
+                ]
+            }
+        ]
+
+        mock_get_network_display_name.\
+            side_effect = lambda network: network.name
+
+        arglist = ['--long']
+        verifylist = []
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        results = self.cmd.take_action(parsed_args)
+
+        data = [
+            [
+                'node1',
+                '11111111-2222-3333-4444-aaaaaaaaaaaa',
+                'aa:aa:aa:aa:aa:aa',
+                'port_uuid_1',
+                'neutron_port_1',
+                'neutron_port_uuid_1',
+                None,
+                'test_network_1',
+                'network_uuid_1',
+                '1.1.1.1',
+                'floating_network_1',
+                'floating_network_id_1',
+                '9.9.9.9 (22:22,23:23)',
+                'floating_ip_uuid_1'
+            ],
+            [
+                'node2',
+                '11111111-2222-3333-4444-bbbbbbbbbbbb',
+                'bb:bb:bb:bb:bb:bb',
+                'port_uuid_2',
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            ],
+            [
+                'node2',
+                '11111111-2222-3333-4444-bbbbbbbbbbbb',
+                'ee:ee:ee:ee:ee:ee',
+                'port_uuid_5',
+                'neutron_port_3',
+                'neutron_port_uuid_3',
+                'trunk_uuid_1',
+                'test_network_3\ntest_network_1\ntest_network_2',
+                'network_uuid_3\nnetwork_uuid_1\nnetwork_uuid_2',
+                '3.3.3.3\n4.4.4.4\n5.5.5.5',
+                'floating_network_2',
+                'floating_network_id_2',
+                '10.10.10.10 (24:24)',
+                'floating_ip_uuid_3'
+            ]
+        ]
+
+        expected = ["Node", "Node UUID", "MAC Address", "Bare Metal Port UUID",
+                    "Port", "Network Port UUID", "Trunk UUID", "Network",
+                    "Network UUID", "Fixed IP", "Floating Network",
+                    "Floating Network UUID", "Floating IP",
+                    "Floating IP UUID"], data
+
+        self.assertEqual(expected, results)
+        mock_get_network_display_name.assert_has_calls([
+            mock.call(self.network1),
+            mock.call(self.floating_network1),
+            mock.call(self.network3),
+            mock.call(self.network1),
+            mock.call(self.network2),
+            mock.call(self.floating_network2),
+        ])
+
 
 class TestAttach(base.TestCommand):
 
@@ -597,36 +732,36 @@ class TestAttach(base.TestCommand):
         self.cmd = node_network.Attach(self.app, None)
 
         self.port1 = utils.create_mock_object({
-            "uuid": "port_uuid_1",
+            "id": "port_uuid_1",
             "node_uuid": "node_uuid_1",
             "address": "aa:aa:aa:aa:aa:aa",
             "internal_info": {'tenant_vif_port_id': 'neutron_port_uuid_1'}
         })
         self.port2 = utils.create_mock_object({
-            "uuid": "port_uuid_2",
+            "id": "port_uuid_2",
             "node_uuid": "node_uuid_1",
             "address": "bb:bb:bb:bb:bb:bb",
             "internal_info": {}
         })
         self.node = utils.create_mock_object({
-            "uuid": "node_uuid_1",
+            "id": "node_uuid_1",
             "name": "node1",
             "provision_state": "active"
         })
         self.node_available = utils.create_mock_object({
-            "uuid": "node_uuid_1",
+            "id": "node_uuid_1",
             "name": "node1",
             "provision_state": "available"
         })
         self.node_manageable = utils.create_mock_object({
-            "uuid": "node_uuid_1",
+            "id": "node_uuid_1",
             "name": "node1",
             "provision_state": "manageable",
             "instance_info": {},
             "driver_info": {'deploy_ramdisk': 'fake-image'},
         })
         self.node_manageable_instance_info = utils.create_mock_object({
-            "uuid": "node_uuid_1",
+            "id": "node_uuid_1",
             "name": "node1",
             "provision_state": "manageable",
             "instance_info": {'image_source': 'fake-image',
@@ -809,7 +944,7 @@ class TestDetach(base.TestCommand):
         self.cmd = node_network.Detach(self.app, None)
 
         self.node = utils.create_mock_object({
-            "uuid": "node_uuid_1",
+            "id": "node_uuid_1",
             "name": "node1",
             "provision_state": "active"
         })
