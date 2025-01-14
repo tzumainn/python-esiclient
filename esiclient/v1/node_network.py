@@ -39,6 +39,11 @@ class List(command.Lister):
             metavar='<network>',
             help=_("Filter by this network (name or UUID).")
         )
+        parser.add_argument(
+            '--long',
+            default=False,
+            help=_("Show detailed information."),
+            action='store_true')
         return parser
 
     def take_action(self, parsed_args):
@@ -53,24 +58,40 @@ class List(command.Lister):
         for node_network in node_networks:
             for node_port in node_network['network_info']:
                 node_name = node_network['node'].name
+                node_uuid = node_network['node'].id
                 mac_address = node_port['baremetal_port'].address
+                baremetal_port_uuid = node_port['baremetal_port'].id
 
                 network_port_name = None
+                network_port_uuid = None
+                trunk_uuid = None
                 network_names = None
+                network_uuids = None
                 fixed_ips = None
                 floating_network = None
+                floating_network_uuid = None
                 floating_ip = None
+                floating_ip_uuid = None
 
                 if node_port['networks']:
                     if len(node_port['network_ports']):
-                        network_port_name = getattr(
-                            node_port['network_ports'][0], 'name')
+                        primary_port = node_port['network_ports'][0]
+                        network_port_name = getattr(primary_port, 'name')
+                        network_port_uuid = getattr(primary_port, 'id')
+                        if getattr(primary_port, 'trunk_details'):
+                            trunk_uuid = getattr(
+                                primary_port, 'trunk_details')['trunk_id']
 
                     parent_network = node_port['networks']['parent']
                     trunk_networks = node_port['networks']['trunk'] or []
 
                     network_names = '\n'.join([
                         utils.get_network_display_name(network)
+                        for network in [parent_network] + trunk_networks
+                        if network is not None
+                    ]) or None
+                    network_uuids = '\n'.join([
+                        network.id
                         for network in [parent_network] + trunk_networks
                         if network is not None
                     ]) or None
@@ -82,6 +103,8 @@ class List(command.Lister):
                     if node_port['networks']['floating']:
                         floating_network = utils.get_network_display_name(
                             node_port['networks']['floating'])
+                        floating_network_uuid = \
+                            node_port['networks']['floating'].id
 
                         pfwd_ports = ['%s:%s' % (
                             pfwd.internal_port,
@@ -92,19 +115,46 @@ class List(command.Lister):
                             node_port['floating_ip'].floating_ip_address
                         if len(pfwd_ports):
                             floating_ip += ' (%s)' % ','.join(pfwd_ports)
+                        floating_ip_uuid = \
+                            node_port['floating_ip'].id
 
-                data.append([
-                    node_name,
-                    mac_address,
-                    network_port_name,
-                    network_names,
-                    fixed_ips,
-                    floating_network,
-                    floating_ip,
-                ])
+                if parsed_args.long:
+                    data.append([
+                        node_name,
+                        node_uuid,
+                        mac_address,
+                        baremetal_port_uuid,
+                        network_port_name,
+                        network_port_uuid,
+                        trunk_uuid,
+                        network_names,
+                        network_uuids,
+                        fixed_ips,
+                        floating_network,
+                        floating_network_uuid,
+                        floating_ip,
+                        floating_ip_uuid,
+                    ])
+                else:
+                    data.append([
+                        node_name,
+                        mac_address,
+                        network_port_name,
+                        network_names,
+                        fixed_ips,
+                        floating_network,
+                        floating_ip,
+                    ])
 
-        return ["Node", "MAC Address", "Port", "Network", "Fixed IP",
-                "Floating Network", "Floating IP"], data
+        if parsed_args.long:
+            return ["Node", "Node UUID", "MAC Address", "Bare Metal Port UUID",
+                    "Port", "Network Port UUID", "Trunk UUID", "Network",
+                    "Network UUID", "Fixed IP", "Floating Network",
+                    "Floating Network UUID", "Floating IP",
+                    "Floating IP UUID"], data
+        else:
+            return ["Node", "MAC Address", "Port", "Network", "Fixed IP",
+                    "Floating Network", "Floating IP"], data
 
 
 class Attach(command.ShowOne):
