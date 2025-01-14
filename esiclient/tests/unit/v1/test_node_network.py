@@ -1018,16 +1018,6 @@ class TestDetach(base.TestCommand):
         self.node = utils.create_mock_object(
             {"id": "node_uuid_1", "name": "node1", "provision_state": "active"}
         )
-        self.neutron_port1 = utils.create_mock_object(
-            {
-                "id": "neutron_port_uuid_1",
-                "network_id": "network_uuid",
-                "name": "neutron_port_1",
-                "mac_address": "bb:bb:bb:bb:bb:bb",
-                "fixed_ips": [{"ip_address": "2.2.2.2"}],
-                "trunk_details": None,
-            }
-        )
 
     @mock.patch("esi.lib.nodes.network_detach", return_value=True)
     def test_take_action(self, mock_network_detach):
@@ -1039,7 +1029,10 @@ class TestDetach(base.TestCommand):
         self.cmd.take_action(parsed_args)
 
         mock_network_detach.assert_called_once_with(
-            self.app.client_manager.sdk_connection, "node1", None
+            self.app.client_manager.sdk_connection,
+            "node1",
+            port_names_or_uuids=[],
+            all_ports=False,
         )
 
     @mock.patch("esi.lib.nodes.network_detach", return_value=True)
@@ -1052,5 +1045,46 @@ class TestDetach(base.TestCommand):
         self.cmd.take_action(parsed_args)
 
         mock_network_detach.assert_called_once_with(
-            self.app.client_manager.sdk_connection, "node_uuid_1", "neutron_port_1"
+            self.app.client_manager.sdk_connection,
+            "node_uuid_1",
+            port_names_or_uuids=["neutron_port_1"],
+            all_ports=False,
+        )
+
+    @mock.patch("esi.lib.nodes.network_detach", return_value=True)
+    def test_take_action_multiple_ports(self, mock_network_detach):
+        arglist = [
+            "node_uuid_1",
+            "--port",
+            "neutron_port_1",
+            "--port",
+            "neutron_port_2",
+        ]
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+
+        mock_network_detach.assert_called_once_with(
+            self.app.client_manager.sdk_connection,
+            "node_uuid_1",
+            port_names_or_uuids=["neutron_port_1", "neutron_port_2"],
+            all_ports=False,
+        )
+
+    @mock.patch("esi.lib.nodes.network_detach", return_value=True)
+    def test_take_action_all_ports(self, mock_network_detach):
+        arglist = ["node_uuid_1", "--all"]
+        verifylist = []
+
+        parsed_args = self.check_parser(self.cmd, arglist, verifylist)
+
+        self.cmd.take_action(parsed_args)
+
+        mock_network_detach.assert_called_once_with(
+            self.app.client_manager.sdk_connection,
+            "node_uuid_1",
+            port_names_or_uuids=[],
+            all_ports=True,
         )
