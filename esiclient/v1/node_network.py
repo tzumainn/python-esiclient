@@ -10,6 +10,7 @@
 #   License for the specific language governing permissions and limitations
 #   under the License.
 
+import json
 import logging
 
 from osc_lib.command import command
@@ -180,6 +181,79 @@ class List(command.Lister):
             )
 
         return headers, data
+
+
+class Show(command.ShowOne):
+    """Show network details for one node"""
+
+    log = logging.getLogger(__name__ + ".Show")
+
+    def get_parser(self, prog_name):
+        parser = super(Show, self).get_parser(prog_name)
+        parser.add_argument(
+            "node", metavar="<node>", help=_("Name or UUID of the node")
+        )
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+        node_networks = nodes.network_list(
+            self.app.client_manager.sdk_connection, parsed_args.node
+        )
+
+        node_network = node_networks[0]
+        node_ports = []
+        for node_port in node_network["network_info"]:
+            node_port_info = {
+                "mac_address": node_port["baremetal_port"].address,
+                "baremetal_port_uuid": node_port["baremetal_port"].id,
+            }
+            if node_port["network_ports"]:
+                primary_port = node_port["network_ports"][0]
+                node_port_info["network_port"] = {
+                    "name": primary_port.name,
+                    "uuid": primary_port.id,
+                    "fixed_ips": [ip["ip_address"] for ip in primary_port.fixed_ips],
+                }
+                if primary_port.trunk_details:
+                    node_port_info["trunk_uuid"] = primary_port.trunk_details[
+                        "trunk_id"
+                    ]
+            if node_port["networks"]["parent"]:
+                parent_network = node_port["networks"]["parent"]
+                node_port_info["network"] = {
+                    "name": parent_network.name,
+                    "uuid": parent_network.id,
+                    "vlan_id": parent_network.provider_segmentation_id,
+                }
+            if node_port["networks"]["floating"]:
+                floating_network = node_port["networks"]["floating"]
+                node_port_info["floating_network"] = {
+                    "name": floating_network.name,
+                    "uuid": floating_network.id,
+                    "vlan_id": floating_network.provider_segmentation_id,
+                }
+            trunk_network_list = []
+            for trunk_network in node_port["networks"]["trunk"]:
+                trunk_network_list.append(
+                    {
+                        "name": trunk_network.name,
+                        "uuid": trunk_network.id,
+                        "vlan_id": trunk_network.provider_segmentation_id,
+                    }
+                )
+            if trunk_network_list:
+                node_port_info["trunk_networks"] = trunk_network_list
+
+            node_ports.append(node_port_info)
+
+        return ["Node", "Node UUID", "Node Ports"], [
+            node_network["node"].name,
+            node_network["node"].id,
+            node_ports
+            if parsed_args.formatter != "table"
+            else json.dumps(node_ports, indent=2),
+        ]
 
 
 class Attach(command.ShowOne):
