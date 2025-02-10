@@ -11,89 +11,55 @@
 #   under the License.
 #
 
-import mock
-import munch
+from unittest import mock
+import openstack.baremetal.v1.node
+import openstack.connection
 
 from esiclient.tests.unit import base
 from esiclient.v1.mdc import mdc_node_baremetal
 
 
+@mock.patch("esiclient.v1.mdc.mdc_node_baremetal.openstack.connect")
+@mock.patch("openstack.config.loader.OpenStackConfig.get_cloud_names")
 class TestMDCBaremetalNodeList(base.TestCommand):
     def setUp(self):
-        super(TestMDCBaremetalNodeList, self).setUp()
+        super().setUp()
         self.cmd = mdc_node_baremetal.MDCBaremetalNodeList(self.app, None)
+        self.cloud_names = [f"esi{i}" for i in range(1, 4)]
+        self.connection = mock.Mock(openstack.connection.Connection, name="test-cloud")
 
-        class FakeConfig(object):
-            def __init__(self, name, region):
-                self.name = name
-                self.config = {"region_name": region}
+        self.node = {}
+        for i in range(1, 5):
+            node = self.node[i] = mock.Mock(
+                openstack.baremetal.v1.node.Node, name=f"node{i}"
+            )
+            node.configure_mock(
+                id=f"node_uuid_{i}",
+                name=f"node{i}",
+                instance_id=f"instance_uuid_{i}",
+                power_state="off",
+                provision_state="active",
+                is_maintenance=False,
+            )
 
-        self.cloud1 = FakeConfig("esi", "regionOne")
-        self.cloud2 = FakeConfig("esi", "regionTwo")
-        self.cloud3 = FakeConfig("esi2", "regionOne")
-
-        self.node = munch.Munch(
-            uuid="node_uuid_1",
-            name="node1",
-            instance_uuid="instance_uuid_1",
-            power_state="off",
-            provision_state="active",
-            maintenance=False,
-        )
-
-        self.node2 = munch.Munch(
-            uuid="node_uuid_2",
-            name="node2",
-            instance_uuid="instance_uuid_2",
-            power_state="off",
-            provision_state="active",
-            maintenance=False,
-        )
-
-        self.node3 = munch.Munch(
-            uuid="node_uuid_3",
-            name="node3",
-            instance_uuid="instance_uuid_3",
-            power_state="off",
-            provision_state="active",
-            maintenance=False,
-        )
-
-        self.node4 = munch.Munch(
-            uuid="node_uuid_4",
-            name="node4",
-            instance_uuid="instance_uuid_4",
-            power_state="off",
-            provision_state="active",
-            maintenance=False,
-        )
-
-    @mock.patch("esiclient.v1.mdc.mdc_node_baremetal.openstack.connect")
-    @mock.patch(
-        "esiclient.v1.mdc.mdc_node_baremetal.openstack.config.loader."
-        "OpenStackConfig.get_all_clouds"
-    )
-    def test_take_action_list(self, mock_config, mock_connect):
-        mock_cloud = mock.Mock()
-        mock_cloud.list_machines.side_effect = [
-            [self.node],
-            [self.node2],
-            [self.node3, self.node4],
+    def test_take_action_list_all_clouds(self, mock_get_cloud_names, mock_connect):
+        self.connection.list_machines.side_effect = [
+            [self.node[1]],
+            [self.node[2]],
+            [self.node[3], self.node[4]],
         ]
-        mock_connect.return_value = mock_cloud
-
-        mock_config.return_value = [self.cloud1, self.cloud2, self.cloud3]
+        mock_connect.return_value = self.connection
+        mock_get_cloud_names.return_value = self.cloud_names
 
         arglist = []
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
-
         results = self.cmd.take_action(parsed_args)
+
         expected = (
             [
                 "Cloud",
-                "Region",
                 "UUID",
                 "Name",
                 "Instance UUID",
@@ -103,8 +69,7 @@ class TestMDCBaremetalNodeList(base.TestCommand):
             ],
             [
                 [
-                    self.cloud1.name,
-                    self.cloud1.config["region_name"],
+                    "esi1",
                     "node_uuid_1",
                     "node1",
                     "instance_uuid_1",
@@ -113,8 +78,7 @@ class TestMDCBaremetalNodeList(base.TestCommand):
                     False,
                 ],
                 [
-                    self.cloud2.name,
-                    self.cloud2.config["region_name"],
+                    "esi2",
                     "node_uuid_2",
                     "node2",
                     "instance_uuid_2",
@@ -123,8 +87,7 @@ class TestMDCBaremetalNodeList(base.TestCommand):
                     False,
                 ],
                 [
-                    self.cloud3.name,
-                    self.cloud3.config["region_name"],
+                    "esi3",
                     "node_uuid_3",
                     "node3",
                     "instance_uuid_3",
@@ -133,8 +96,7 @@ class TestMDCBaremetalNodeList(base.TestCommand):
                     False,
                 ],
                 [
-                    self.cloud3.name,
-                    self.cloud3.config["region_name"],
+                    "esi3",
                     "node_uuid_4",
                     "node4",
                     "instance_uuid_4",
@@ -145,26 +107,19 @@ class TestMDCBaremetalNodeList(base.TestCommand):
             ],
         )
         self.assertEqual(expected, results)
-        mock_config.assert_called_once()
-        assert mock_cloud.list_machines.call_count == 3
+        mock_get_cloud_names.assert_called_once()
+        assert self.connection.list_machines.call_count == 3
 
-    @mock.patch("esiclient.v1.mdc.mdc_node_baremetal.openstack.connect")
-    @mock.patch(
-        "esiclient.v1.mdc.mdc_node_baremetal.openstack.config.loader."
-        "OpenStackConfig.get_all_clouds"
-    )
-    def test_take_action_list_cloud(self, mock_config, mock_connect):
-        mock_cloud = mock.Mock()
-        mock_cloud.list_machines.side_effect = [
-            [self.node],
-            [self.node2],
-            [self.node3, self.node4],
+    def test_take_action_list_specific_cloud(self, mock_get_cloud_names, mock_connect):
+        self.connection.list_machines.side_effect = [
+            [self.node[1]],
+            [self.node[2]],
+            [self.node[3], self.node[4]],
         ]
-        mock_connect.return_value = mock_cloud
+        mock_connect.return_value = self.connection
+        mock_get_cloud_names.return_value = self.cloud_names
 
-        mock_config.return_value = [self.cloud1, self.cloud2, self.cloud3]
-
-        arglist = ["--clouds", "esi"]
+        arglist = ["esi1"]
         verifylist = []
 
         parsed_args = self.check_parser(self.cmd, arglist, verifylist)
@@ -173,7 +128,6 @@ class TestMDCBaremetalNodeList(base.TestCommand):
         expected = (
             [
                 "Cloud",
-                "Region",
                 "UUID",
                 "Name",
                 "Instance UUID",
@@ -183,8 +137,7 @@ class TestMDCBaremetalNodeList(base.TestCommand):
             ],
             [
                 [
-                    self.cloud1.name,
-                    self.cloud1.config["region_name"],
+                    "esi1",
                     "node_uuid_1",
                     "node1",
                     "instance_uuid_1",
@@ -192,18 +145,8 @@ class TestMDCBaremetalNodeList(base.TestCommand):
                     "active",
                     False,
                 ],
-                [
-                    self.cloud2.name,
-                    self.cloud2.config["region_name"],
-                    "node_uuid_2",
-                    "node2",
-                    "instance_uuid_2",
-                    "off",
-                    "active",
-                    False,
-                ],
             ],
         )
         self.assertEqual(expected, results)
-        mock_config.assert_called_once()
-        assert mock_cloud.list_machines.call_count == 2
+        mock_get_cloud_names.assert_called_once()
+        assert self.connection.list_machines.call_count == 1

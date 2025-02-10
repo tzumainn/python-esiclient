@@ -24,13 +24,14 @@ class MDCBaremetalNodeList(command.Lister):
     auth_required = False
 
     def get_parser(self, prog_name):
-        parser = super(MDCBaremetalNodeList, self).get_parser(prog_name)
+        parser = super().get_parser(prog_name)
+        parser.add_argument("--ignore-invalid", "-i", action="store_true")
         parser.add_argument(
-            "--clouds",
-            dest="clouds",
+            "clouds",
             metavar="<clouds>",
-            nargs="+",
+            nargs="*",
             help=_("Specify the cloud to use from clouds.yaml."),
+            default=openstack.config.OpenStackConfig().get_cloud_names(),
         )
 
         return parser
@@ -38,7 +39,6 @@ class MDCBaremetalNodeList(command.Lister):
     def take_action(self, parsed_args):
         columns = [
             "Cloud",
-            "Region",
             "UUID",
             "Name",
             "Instance UUID",
@@ -48,27 +48,26 @@ class MDCBaremetalNodeList(command.Lister):
         ]
         data = []
 
-        cloud_regions = openstack.config.loader.OpenStackConfig().get_all_clouds()
-        if parsed_args.clouds:
-            cloud_regions = filter(
-                lambda c: c.name in parsed_args.clouds, cloud_regions
-            )
-        for c in cloud_regions:
-            nodes = openstack.connect(
-                cloud=c.name, region=c.config["region_name"]
-            ).list_machines()
-            for n in nodes:
-                data.append(
+        for cloud in parsed_args.clouds:
+            try:
+                data.extend(
                     [
-                        c.name,
-                        c.config["region_name"],
-                        n.uuid,
-                        n.name,
-                        n.instance_uuid,
-                        n.power_state,
-                        n.provision_state,
-                        n.maintenance,
+                        cloud,
+                        node.id,
+                        node.name,
+                        node.instance_id,
+                        node.power_state,
+                        node.provision_state,
+                        node.is_maintenance,
                     ]
+                    for node in openstack.connect(cloud=cloud).list_machines()
                 )
+            except Exception as err:
+                if parsed_args.ignore_invalid:
+                    self.log.error(
+                        "failed to retrieve information for cloud %s: %s", cloud, err
+                    )
+                    continue
+                raise
 
         return columns, data
