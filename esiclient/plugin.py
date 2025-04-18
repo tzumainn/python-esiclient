@@ -21,6 +21,9 @@ LOG = logging.getLogger(__name__)
 DEFAULT_BAREMETAL_API_VERSION = "1.69"
 DEFAULT_ESICLIENT_API_VERSION = "1"
 
+if "OS_BAREMETAL_API_VERSION" not in os.environ:
+    os.environ["OS_BAREMETAL_API_VERSION"] = DEFAULT_BAREMETAL_API_VERSION
+
 # Required by the OSC plugin interface
 API_NAME = "esiclient"
 API_VERSION_OPTION = "os_esiclient_api_version"
