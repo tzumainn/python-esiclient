@@ -1,3 +1,5 @@
+# pyright: basic
+
 #   Licensed under the Apache License, Version 2.0 (the "License"); you may
 #   not use this file except in compliance with the License. You may obtain
 #   a copy of the License at
@@ -18,6 +20,8 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
+import openstack.network
+
 from osc_lib.command import command
 from osc_lib import exceptions
 from osc_lib.i18n import _  # noqa
@@ -25,7 +29,7 @@ from osc_lib.i18n import _  # noqa
 LOG = logging.getLogger(__name__)
 
 re_port_spec = re.compile(
-    r"(?:(?P<ext_port>\d+):)?(?P<int_port>\d+)(?:/(?P<protocol>\w+))?"
+    r"(?:(?P<external_port>\d+):)?(?P<internal_port>\d+)(?:/(?P<protocol>\w+))?"
 )
 
 
@@ -38,26 +42,26 @@ class Protocol(str, Enum):
 class PortSpec:
     """Represent a port forwarding from an external port to an internal port"""
 
-    int_port: int
-    ext_port: int
+    internal_port: int
+    external_port: int
     protocol: Protocol = Protocol.TCP
 
     def __str__(self):
-        return f"{self.ext_port}:{self.int_port}/{self.protocol}"
+        return f"{self.external_port}:{self.internal_port}/{self.protocol}"
 
     def __post_init__(self):
         """Apply defaults and validate attributes"""
 
-        if self.ext_port is None:
-            self.ext_port = self.int_port
+        if self.external_port is None:
+            self.external_port = self.internal_port
         if self.protocol is None:
             self.protocol = Protocol.TCP
 
-        self.int_port = int(self.int_port)
-        self.ext_port = int(self.ext_port)
+        self.internal_port = int(self.internal_port)
+        self.external_port = int(self.external_port)
         self.protocol = Protocol(self.protocol)
 
-        for port in [self.int_port, self.ext_port]:
+        for port in [self.internal_port, self.external_port]:
             if port not in range(0, 65536):
                 raise ValueError(f"port {port} out of range")
 
@@ -73,7 +77,6 @@ class PortSpec:
 
 
 def PortSpecArg(v):
-    """this is a test"""
     try:
         return PortSpec.from_spec(v)
     except ValueError as err:
@@ -233,6 +236,18 @@ class NetworkOpsMixin:
             )
 
 
+def port_forwarding_exists(fip, internal_ip_address, port):
+    for check in fip.port_forwardings:
+        fwd = openstack.network.v2.port_forwarding.PortForwarding(id="exists", **check)
+        if (
+            port.internal_port == fwd.internal_port
+            and port.external_port == fwd.external_port
+            and internal_ip_address == fwd.internal_ip_address
+            and port.protocol == fwd.protocol
+        ):
+            return fwd
+
+
 def format_forwards(func):
     """A decorator that transforms a list of (floating_ip, port_forwarding) tuples
     into a list suitable for a cliff command.Lister"""
@@ -330,20 +345,23 @@ class Create(command.Lister, NetworkOpsMixin):
             internal_ip_address = internal_port.fixed_ips[0]["ip_address"]
 
         for port in parsed_args.port:
-            fwd = self.app.client_manager.sdk_connection.network.create_floating_ip_port_forwarding(
-                fip,
-                internal_ip_address=internal_ip_address,
-                internal_port=port.int_port,
-                internal_port_id=internal_port.id,
-                external_port=port.ext_port,
-                protocol=port.protocol,
-                **(
-                    {"description": parsed_args.description}
-                    if parsed_args.description
-                    else {}
-                ),
-            )
-            forwards.append((fip, fwd))
+            if fwd := port_forwarding_exists(fip, internal_ip_address, port):
+                forwards.append((fip, fwd))
+            else:
+                fwd = self.app.client_manager.sdk_connection.network.create_floating_ip_port_forwarding(
+                    fip,
+                    internal_ip_address=internal_ip_address,
+                    internal_port=port.internal_port,
+                    internal_port_id=internal_port.id,
+                    external_port=port.external_port,
+                    protocol=port.protocol,
+                    **(
+                        {"description": parsed_args.description}
+                        if parsed_args.description
+                        else {}
+                    ),
+                )
+                forwards.append((fip, fwd))
 
         return forwards
 
@@ -391,9 +409,9 @@ class Delete(command.Lister, NetworkOpsMixin):
                 fip
             ):
                 if (
-                    fwd.external_port == port.ext_port
+                    fwd.external_port == port.external_port
                     and fwd.internal_ip_address == internal_ip_address
-                    and fwd.internal_port == port.int_port
+                    and fwd.internal_port == port.internal_port
                 ):
                     forwards.append((fip, fwd))
                     break
