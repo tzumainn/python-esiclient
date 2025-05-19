@@ -27,6 +27,7 @@ class PortForwardTestCase(testtools.TestCase):
             name="floating_ip_1",
             id="floating_ip_1",
             floating_ip_address="111.111.111.111",
+            port_forwardings=[],
         )
         self.forward_1 = mock.Mock(
             name="port_forwarding_1",
@@ -40,13 +41,25 @@ class PortForwardTestCase(testtools.TestCase):
 
 class TestPortSpec(testtools.TestCase):
     test_params = (
-        ("22", True, PortSpec(int_port=22, ext_port=22, protocol=Protocol.TCP)),
-        ("22/udp", True, PortSpec(int_port=22, ext_port=22, protocol=Protocol.UDP)),
-        ("2222:22", True, PortSpec(int_port=22, ext_port=2222, protocol=Protocol.TCP)),
+        (
+            "22",
+            True,
+            PortSpec(internal_port=22, external_port=22, protocol=Protocol.TCP),
+        ),
+        (
+            "22/udp",
+            True,
+            PortSpec(internal_port=22, external_port=22, protocol=Protocol.UDP),
+        ),
+        (
+            "2222:22",
+            True,
+            PortSpec(internal_port=22, external_port=2222, protocol=Protocol.TCP),
+        ),
         (
             "2222:22/tcp",
             True,
-            PortSpec(int_port=22, ext_port=2222, protocol=Protocol.TCP),
+            PortSpec(internal_port=22, external_port=2222, protocol=Protocol.TCP),
         ),
         ("invalid", False, None),
         ("100000", False, None),
