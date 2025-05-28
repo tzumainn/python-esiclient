@@ -416,7 +416,7 @@ class Delete(command.Lister, NetworkOpsMixin):
                     forwards.append((fip, fwd))
                     break
             else:
-                raise KeyError(f"could not find port forwarding matching {port}")
+                LOG.warning(f"port forwarding matching {port} does not exist")
 
         for fip, fwd in forwards:
             self.app.client_manager.sdk_connection.network.delete_floating_ip_port_forwarding(
